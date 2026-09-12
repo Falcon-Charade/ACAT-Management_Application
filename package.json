@@ -1,0 +1,10 @@
+{
+  "name": "acat-local-dev",
+  "private": true,
+  "scripts": {
+    "dev": "node dev/server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}
