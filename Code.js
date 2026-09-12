@@ -148,11 +148,20 @@ function getCurrentUser() {
 
   const normalizedEmail = email.toLowerCase();
 
-  const roleRecord = rowsToObjects_(sheet).find(record =>
-    String(record.Email ?? record.email ?? '')
-      .trim()
-      .toLowerCase() === normalizedEmail
-  );
+  const roleRecord =
+    rowsToObjects_(sheet).find(record => {
+  
+      const emails =
+        parseEmailList_(
+          record.Email ??
+          record.email ??
+          ''
+        );
+  
+      return emails.includes(
+        normalizedEmail
+      );
+    });
 
   return {
     email,
@@ -183,15 +192,18 @@ function getPermissions() {
     };
   }
 
-  const roleRecord = rowsToObjects_(sheet).find(record => {
-    const recordEmail = String(
-      record.Email ?? record.email ?? ''
-    )
-      .trim()
-      .toLowerCase();
-
-    return recordEmail === email;
-  });
+  const roleRecord =
+    rowsToObjects_(sheet).find(record => {
+  
+      const emails =
+        parseEmailList_(
+          record.Email ??
+          record.email ??
+          ''
+        );
+  
+      return emails.includes(email);
+    });
 
   const hasRole = role => {
     if (!roleRecord) {
@@ -3993,4 +4005,15 @@ function updateRoleNamesConfig() {
   );
 
   return config;
+}
+
+function parseEmailList_(value) {
+  return String(value || '')
+    .split(';')
+    .map(email =>
+      email
+        .trim()
+        .toLowerCase()
+    )
+    .filter(Boolean);
 }
