@@ -475,6 +475,29 @@
       min-width: 280px;
     }
 
+    body.app-loading header,
+    body.app-loading .layout {
+      pointer-events: none;
+      user-select: none;
+    }
+    
+    body.app-loading {
+      overflow: hidden;
+    }
+    
+    #appLoadingDialog {
+      pointer-events: auto;
+    }
+
+    .app-loading-dialog {
+      width: min(360px, calc(100vw - 32px));
+    }
+    
+    .app-loading-dialog::backdrop {
+      background: rgba(17, 24, 39, 0.65);
+      backdrop-filter: blur(3px);
+    }
+
     .spinner {
       width: 40px;
       height: 40px;
@@ -1195,6 +1218,21 @@
   
   </dialog>
 
+  <dialog
+    id="appLoadingDialog"
+    class="app-loading-dialog"
+  >
+    <div class="dialog-body loading-dialog-body">
+      <div class="spinner"></div>
+  
+      <h3>Loading ACAT Management</h3>
+  
+      <div class="muted">
+        Please be patient. Retrieving application data...
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="trainingLoadingDialog">
     <div class="dialog-body loading-dialog-body">
       <div class="spinner"></div>
@@ -1764,7 +1802,7 @@
       </div>
     </div>
   </dialog>
-
+  
   <dialog id="roleManagementDialog" class="wide-dialog">
     <div class="dialog-body">
       <h3>Manage User Roles</h3>
@@ -1863,7 +1901,41 @@
 
   document.getElementById('memberSearch').addEventListener('input', renderMembers);
 
+  const appLoadingDialog =
+    document.getElementById(
+      'appLoadingDialog'
+    );
+  
+  appLoadingDialog.addEventListener(
+    'cancel',
+    event => {
+      event.preventDefault();
+    }
+  );
+
+  document.addEventListener(
+    'keydown',
+    event => {
+      if (
+        document.body.classList.contains(
+          'app-loading'
+        )
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    },
+    true
+  );
+
   function boot() {
+    const loadingDialog =
+      document.getElementById(
+        'appLoadingDialog'
+      );
+
+    loadingDialog.showModal();
+
     google.script.run
       .withSuccessHandler(data => {
         state = {
@@ -1881,6 +1953,11 @@
           archivedTrainingRecords: []
         };
 
+
+        /* -------------------------------- */
+        /* Initialise user interface        */
+        /* -------------------------------- */
+
         const userName =
           String(state.user?.name || '').trim();
         
@@ -1893,13 +1970,33 @@
         document.getElementById('appName').textContent = data.appName;
         document.getElementById('userDisplay').textContent = data.user.email || 'Signed-in user';
 
+        /* -------------------------------- */
+        /* Render initial application       */
+        /* -------------------------------- */
+
         updateDashboard();
         renderMembers();
         renderPMC();
         populateMemberSelectors();
         applyPermissions();
+
+        /* -------------------------------- */
+        /* Initial load complete            */
+        /* -------------------------------- */
+        loadingDialog.close();
       })
-      .withFailureHandler(showError)
+      .withFailureHandler(error => {
+        /*
+         * Always close the loading dialog,
+         * otherwise a failed bootstrap would
+         * leave the application permanently
+         * blocked.
+         */
+        if (loadingDialog.open) {
+          loadingDialog.close();
+        }
+        showError(error);
+      })
       .getBootstrapData();
   }
 
@@ -5429,7 +5526,7 @@
     );
   }
 
-  const feedbackTimers = new WeakMap();
+const feedbackTimers = new WeakMap();
   
   function getActiveDialog_() {
     // Prefer the dialog currently containing keyboard focus.
