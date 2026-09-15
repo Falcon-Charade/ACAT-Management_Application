@@ -1,0 +1,810 @@
+<!--
+  @file Training.html
+  @description Provides client-side training record viewing, editing, expiry
+  previews, archiving, and reporting charts for the ACAT Management Application.
+
+  Responsibilities:
+  - Loads, filters, and renders active training records by area and member name.
+  - Creates or updates competency and trainer records.
+  - Requests and displays calculated competency expiry dates.
+  - Archives active training records.
+  - Calculates relative or custom reporting date ranges.
+  - Loads training graph data and renders valid competency totals.
+  - Refreshes related dashboard metrics after training changes.
+
+  Important:
+  - Trainer access is required to create or update competency records.
+  - Only administrators can assign Trainer status or archive training records.
+  - Client-side permission checks control visibility and interaction only;
+    server-side authorization remains required.
+  - Archiving a record requires user confirmation.
+  - Values inserted into generated HTML must use `escapeHtml()` or
+    `escapeAttr()` as appropriate.
+  - Training area values, state properties, and DOM element IDs must remain
+    synchronized with the server configuration and Index.html.
+  - Google Charts must finish loading before a training chart is drawn.
+
+  Dependencies:
+  - Shared application state from App.html.
+  - Google Apps Script `google.script.run` client API.
+  - Google Charts `corechart` package.
+  - Server-side training record, expiry, graph, and dashboard functions.
+  - Shared member-selection, escaping, notification, and dashboard utilities.
+  - Training tables, forms, filters, dialogs, and chart elements defined in
+    Index.html.
+-->
+
+<script>
+  google.charts.load(
+    'current',
+    {
+      packages: ['corechart']
+    }
+  );
+  
+  function loadTrainingArea() {
+    const area =
+      document.getElementById(
+        'trainingAreaFilter'
+      ).value;
+  
+    const loadingDialog =
+      document.getElementById(
+        'trainingLoadingDialog'
+      );
+  
+    loadingDialog.showModal();
+  
+    google.script.run
+      .withSuccessHandler(records => {
+  
+        loadingDialog.close();
+  
+        state.trainingRecords =
+          records || [];
+  
+        renderTrainingAreaRecords();
+  
+      })
+      .withFailureHandler(error => {
+  
+        loadingDialog.close();
+  
+        showError(error);
+  
+      })
+      .getTrainingByArea(area);
+  }
+
+  function renderTrainingAreaRecords() {
+    const search =
+      document
+        .getElementById('trainingSearch')
+        .value
+        .trim()
+        .toLowerCase();
+  
+    const records =
+      state.trainingRecords.filter(record => {
+  
+        if (!search) {
+          return true;
+        }
+  
+        return String(
+          record.memberName || ''
+        )
+          .toLowerCase()
+          .includes(search);
+      });
+  
+    if (!records.length) {
+      document.getElementById(
+        'trainingResults'
+      ).innerHTML =
+        '<div class="muted">No matching training records found.</div>';
+  
+      return;
+    }
+  
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>Member Name</th>
+            <th>Training Area</th>
+            <th>Status</th>
+            <th>Training Completion Date</th>
+            <th>Competencies Expiry</th>
+    `;
+
+    if (state.permissions.isAdmin) {
+      html += `
+        <th>Actions</th>
+      `;
+    }
+
+    html += `
+          </tr>
+        </thead>
+  
+        <tbody>
+    `;
+  
+    records.forEach(record => {
+  
+      const isTrainer =
+        String(record.status || '')
+          .toLowerCase() === 'trainer';
+  
+      html += `
+        <tr>
+  
+          <td>
+            ${escapeHtml(
+              record.memberName || ''
+            )}
+          </td>
+  
+          <td>
+            ${escapeHtml(
+              record.area || ''
+            )}
+          </td>
+  
+          <td>
+            ${escapeHtml(
+              record.status || ''
+            )}
+          </td>
+  
+          <td>
+            ${
+              isTrainer
+                ? 'N/A'
+                : escapeHtml(
+                    record.trainingDate || ''
+                  )
+            }
+          </td>
+  
+          <td>
+            ${
+              isTrainer
+                ? 'N/A'
+                : escapeHtml(
+                    record.expiryDate || ''
+                  )
+            }
+          </td>`;
+
+          if (state.permissions.isAdmin) {
+            html += `
+              <td>
+                <button
+                  class="action"
+                  onclick="archiveTraining(
+                    '${escapeAttr(record.area)}',
+                    ${record.row},
+                    this
+                  )"
+                >
+                  Archive
+                </button>
+              </td>
+            `;
+          }
+  
+          html += '</tr>';
+    });
+  
+    html += `
+        </tbody>
+      </table>
+    `;
+  
+    document.getElementById(
+      'trainingResults'
+    ).innerHTML = html;
+  }
+  
+  function archiveTraining(
+    area,
+    row,
+    button
+  ) {
+    if (!state.permissions.isAdmin) {
+      showError(
+        'Administrator access required.'
+      );
+      return;
+    }
+  
+    if (
+      !confirm(
+        `Archive this ${area} training record?`
+      )
+    ) {
+      return;
+    }
+
+    // Loading state
+    button.disabled = true;
+    button.innerHTML =
+      '<span class="button-spinner"></span>Archiving...';
+  
+    google.script.run
+      .withSuccessHandler(() => {
+  
+        showSuccess(
+          'Training record archived.'
+        );
+  
+        /*
+         * Refresh the current Training page.
+         */
+        loadTrainingArea();
+  
+        /*
+         * Refresh the dashboard graph so
+         * archived data disappears immediately.
+         */
+        loadTrainingChart();
+
+        /*
+         * Refresh the dashboard cards so
+         * archived data disappears immediately.
+         */
+        refreshDashboardCounts();
+  
+      })
+      .withFailureHandler(error => {
+
+        // Restore button if the operation failed.
+        button.disabled = false;
+        button.textContent = 'Archive';
+
+        showError(error);
+      })
+      .archiveTrainingRecord(
+        area,
+        row
+      );
+  }
+  
+  function openTrainingEditor() {
+    if (!state.permissions.isTrainer) {
+      showError(
+        'Trainer access required.'
+      );
+      return;
+    }
+  
+    document.getElementById(
+      'trainingEditStatus'
+    ).value = 'Competency';
+  
+    /*
+     * If a single training area is currently
+     * selected, default the editor to it.
+     */
+    const selectedArea =
+      document.getElementById(
+        'trainingAreaFilter'
+      ).value;
+  
+    if (
+      selectedArea !== 'All' &&
+      state.trainingSheets.includes(
+        selectedArea
+      )
+    ) {
+      document.getElementById(
+        'trainingEditArea'
+      ).value =
+        selectedArea;
+    }
+  
+    document.getElementById(
+      'trainingTypeRow'
+    ).style.display =
+      state.permissions.isAdmin
+        ? ''
+        : 'none';
+  
+    updateTrainingDateVisibility();
+  
+    document.getElementById(
+      'trainingEditDialog'
+    ).showModal();
+  }
+  
+  function saveTrainingRecord() {
+    const saveButton =
+      document.getElementById(
+        'trainingSaveButton'
+      );
+  
+    const memberName = readSelectedFullMember('trainingEditMember');
+  
+    const trainingSheet =
+      document.getElementById(
+        'trainingEditArea'
+      ).value;
+  
+    const selectedType =
+      document.getElementById(
+        'trainingEditStatus'
+      ).value;
+  
+    const isTrainerRecord =
+      state.permissions.isAdmin &&
+      selectedType === 'Trainer';
+  
+    const lastCompetenciesDate =
+      document.getElementById(
+        'trainingEditLastDate'
+      ).value;
+  
+    if (!trainingSheet) {
+      showError('Select a training area.');
+      return;
+    }
+  
+    if (!lastCompetenciesDate) {
+      showError(
+        'Training Completion Date is required.'
+      );
+      return;
+    }
+  
+    const payload = {
+      memberName,
+      trainingSheet,
+      isTrainerRecord,
+      lastCompetenciesDate
+    };
+  
+    const dialog =
+      document.getElementById(
+        'trainingEditDialog'
+      );
+  
+    // Prevent multiple submissions.
+    saveButton.disabled = true;
+    saveButton.innerHTML =
+      '<span class="button-spinner"></span>Saving...';
+  
+    google.script.run
+      .withSuccessHandler(() => {
+  
+        saveButton.disabled = false;
+        saveButton.textContent = 'Save';
+  
+        dialog.close();
+  
+        showSuccess(
+          `${trainingSheet} training updated for ${memberName}.`
+        );
+  
+        loadTrainingArea();
+  
+        refreshDashboardCounts();
+      })
+      .withFailureHandler(error => {
+  
+        saveButton.disabled = false;
+        saveButton.textContent = 'Save';
+  
+        showError(error);
+  
+      })
+      .upsertTrainingRecord(payload);
+  }
+  
+  function updateTrainingDateVisibility() {
+    const status =
+      document
+        .getElementById(
+          'trainingEditStatus'
+        )
+        .value;
+
+    const expiryField =
+      document.getElementById(
+        'trainingExpiryField'
+      );
+
+    const isTrainer =
+      status === 'Trainer';
+
+    expiryField.style.display =
+      isTrainer
+        ? 'none'
+        : '';
+
+    if (isTrainer) {
+      document.getElementById(
+        'trainingEditExpiry'
+      ).value = '';
+    } else {
+      updateTrainingExpiryPreview();
+    }
+  }
+  
+  function updateTrainingExpiryPreview() {
+    const status =
+      document.getElementById(
+        'trainingEditStatus'
+      ).value;
+
+    if (status === 'Trainer') {
+      document.getElementById(
+        'trainingEditExpiry'
+      ).value = '';
+
+      return;
+    }
+
+    const trainingArea =
+      document.getElementById('trainingEditArea').value;
+  
+    const lastDate =
+      document.getElementById('trainingEditLastDate').value;
+  
+    const expiryField =
+      document.getElementById('trainingEditExpiry');
+  
+    // Nothing to calculate yet
+    if (!trainingArea || !lastDate) {
+      expiryField.value = '';
+      return;
+    }
+  
+    expiryField.value = '';
+  
+    google.script.run
+      .withSuccessHandler(expiryDate => {
+        expiryField.value = expiryDate || '';
+      })
+      .withFailureHandler(error => {
+        expiryField.value = '';
+        showError(error);
+      })
+      .getTrainingExpiryPreview(
+        trainingArea,
+        lastDate
+      );
+  }
+  
+  function openTrainingGraphDialog() {
+    const dialog =
+      document.getElementById('trainingGraphDialog');
+  
+    dialog.showModal();
+  
+    // Draw only after the dialog has become visible.
+    requestAnimationFrame(() => {
+      google.charts.setOnLoadCallback(loadTrainingChart);
+    });
+  }
+  
+  function updateChartRangeControls() {
+    const type =
+      document.getElementById(
+        'chartRangeType'
+      ).value;
+  
+    const custom =
+      type === 'custom';
+  
+    document.getElementById(
+      'chartRelativeRange'
+    ).style.display =
+      custom ? 'none' : '';
+  
+    document.getElementById(
+      'chartCustomStart'
+    ).style.display =
+      custom ? '' : 'none';
+  
+    document.getElementById(
+      'chartCustomEnd'
+    ).style.display =
+      custom ? '' : 'none';
+  }
+  
+  function getChartDates() {
+    const type =
+      document.getElementById(
+        'chartRangeType'
+      ).value;
+  
+    const today = new Date();
+  
+    const end =
+      new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate()
+      );
+  
+    let start;
+  
+    if (type === 'custom') {
+  
+      const startValue =
+        document.getElementById(
+          'chartStartDate'
+        ).value;
+  
+      const endValue =
+        document.getElementById(
+          'chartEndDate'
+        ).value;
+  
+      if (!startValue || !endValue) {
+        throw new Error(
+          'Select both a start and end date.'
+        );
+      }
+  
+      return {
+        start: startValue,
+        end: endValue
+      };
+    }
+  
+    const amount =
+      Number(
+        document.getElementById(
+          'chartRangeAmount'
+        ).value
+      );
+  
+    if (
+      !Number.isInteger(amount) ||
+      amount < 1
+    ) {
+      throw new Error(
+        'Range must be at least 1.'
+      );
+    }
+  
+    start = new Date(end);
+  
+    if (type === 'months') {
+      start.setMonth(
+        start.getMonth() - amount
+      );
+    } else {
+      start.setDate(
+        start.getDate() - amount
+      );
+    }
+  
+    return {
+      start: dateToInputValue(start),
+      end: dateToInputValue(end)
+    };
+  }
+  
+  function dateToInputValue(date) {
+    const year =
+      date.getFullYear();
+  
+    const month =
+      String(date.getMonth() + 1)
+        .padStart(2, '0');
+  
+    const day =
+      String(date.getDate())
+        .padStart(2, '0');
+  
+    return `${year}-${month}-${day}`;
+  }
+  
+  function loadTrainingChart() {
+    let dates;
+  
+    try {
+      dates = getChartDates();
+    } catch (error) {
+      console.error('getChartDates failed:', error);
+      showError(error);
+      return;
+    }
+  
+    const area =
+      document.getElementById(
+        'chartTrainingArea'
+      ).value;
+
+    console.log('Loading training chart', {
+      area,
+      start: dates.start,
+      end: dates.end
+    });
+  
+    document.getElementById(
+      'trainingChart'
+    ).innerHTML =
+      '<div class="muted">Loading chart...</div>';
+  
+    google.script.run
+      .withSuccessHandler(data => {
+        console.log(
+          'getTrainingGraphData returned:',
+          data
+        );
+
+        try {
+          drawTrainingChart(data);
+        } catch (error) {
+          console.error(
+            'drawTrainingChart failed:',
+            error
+          );
+
+          document.getElementById(
+            'trainingChart'
+          ).innerHTML =
+            '<div class="error" style="display:block;">Chart rendering failed. Check browser console.</div>';
+
+          showError(error);
+        }
+      })
+      .withFailureHandler(error => {
+        console.error(
+          'getTrainingGraphData failed:',
+          error
+        );
+
+        document.getElementById(
+          'trainingChart'
+        ).innerHTML =
+          '<div class="error" style="display:block;">Unable to load chart data.</div>';
+
+        showError(error);
+      })
+      .getTrainingGraphData(
+        area,
+        dates.start,
+        dates.end
+      );
+  }
+  
+  function drawTrainingChart(records) {
+    if (!records.length) {
+      document.getElementById(
+        'trainingChart'
+      ).innerHTML =
+        '<div class="muted">No training data found.</div>';
+  
+      return;
+    }
+  
+    const data =
+      new google.visualization.DataTable();
+  
+    data.addColumn(
+      'date',
+      'Date'
+    );
+  
+    data.addColumn(
+      'number',
+      'Valid Competencies'
+    );
+  
+    records.forEach(record => {
+      const parts =
+        record.date
+          .split('-')
+          .map(Number);
+  
+      data.addRow([
+        new Date(
+          parts[0],
+          parts[1] - 1,
+          parts[2]
+        ),
+  
+        record.count
+      ]);
+    });
+  
+    const options = {
+      height: 400,
+    
+      legend: {
+        position: 'none'
+      },
+    
+      hAxis: {
+        title: 'Date',
+    
+        // Example: "Sep 12, 2026"
+        format: 'MMM d, yyyy',
+    
+        slantedText: true,
+        slantedTextAngle: 35,
+    
+        textStyle: {
+          color: '#374151',
+          fontSize: 11
+        },
+    
+        titleTextStyle: {
+          color: '#1f2937',
+          fontSize: 13,
+          bold: true
+        },
+    
+        gridlines: {
+          color: '#cbd5e1',
+          count: 8
+        },
+    
+        minorGridlines: {
+          count: 0
+        },
+    
+        baselineColor: '#94a3b8'
+      },
+    
+      vAxis: {
+        title: 'Valid Competencies',
+        minValue: 0,
+        format: '0',
+    
+        textStyle: {
+          color: '#374151',
+          fontSize: 11
+        },
+    
+        titleTextStyle: {
+          color: '#1f2937',
+          fontSize: 13,
+          bold: true
+        },
+    
+        gridlines: {
+          color: '#cbd5e1'
+        },
+    
+        minorGridlines: {
+          color: '#e5e7eb'
+        },
+    
+        baselineColor: '#94a3b8'
+      },
+    
+      colors: ['#4f46e5'],
+    
+      lineWidth: 3,
+      pointSize: 2,
+    
+      chartArea: {
+        left: 80,
+        top: 30,
+        right: 30,
+        bottom: 100,
+        width: '100%'
+      }
+    };
+  
+    const chart =
+      new google.visualization.LineChart(
+        document.getElementById(
+          'trainingChart'
+        )
+      );
+  
+    chart.draw(
+      data,
+      options
+    );
+  }
+
+</script>

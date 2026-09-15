@@ -1,0 +1,237 @@
+<!--
+  @file App.html
+  @description Initializes the ACAT Management Application and coordinates its
+  shared client-side state, navigation, permissions, and initial rendering.
+
+  Responsibilities:
+  - Defines the shared application state and selected-record references.
+  - Retrieves bootstrap data from the server when the application starts.
+  - Displays signed-in user and application information.
+  - Triggers the initial dashboard, member, PMC, and selector rendering.
+  - Controls navigation between application sections.
+  - Loads training data when the Training section is first opened.
+  - Shows or hides interface controls according to the user's permissions.
+  - Blocks interaction while the application is loading.
+  - Restores the interface and displays an error if initialization fails.
+  - Opens the account-switch dialog and redirects to Google's Account Chooser.
+
+  Important:
+  - `state` is shared by the application's frontend modules.
+  - Client-side permission checks control visibility only and do not replace
+    server-side authorization.
+  - Bootstrap failures must always release the loading state and close its dialog.
+  - Navigation buttons require a `data-section` value matching a section ID.
+  - DOM element IDs must remain synchronized with Index.html.
+  - This script should run after the required page elements and frontend
+    functions have been defined.
+
+  Dependencies:
+  - Google Apps Script `google.script.run` client API.
+  - The server-side `getBootstrapData()` function.
+  - Dashboard, member, PMC, training, selector, and notification functions.
+  - Navigation, loading-dialog, user-display, and permission-controlled elements
+    defined in Index.html.
+  - Google Account Chooser for switching the active Google account.
+-->
+
+<script>
+  let state = {
+    members: [],
+    pmcRecords: [],
+    trainingSheets: [],
+    trainingRecords: [],
+    trainingHistoryRecords: [],
+    archivedTrainingRecords: [],
+    permissions: {},
+    admins: [],
+    recruiters: [],
+    trainers: [],
+    missionCreators: []
+  };
+  
+  let viewedMember = null;
+  let pendingArchivedPMC = null;
+
+  function boot() {
+    const loadingDialog =
+      document.getElementById(
+        'appLoadingDialog'
+      );
+
+    document.body.classList.add(
+      'app-loading'
+    );
+
+    loadingDialog.showModal();
+
+    google.script.run
+      .withSuccessHandler(data => {
+        state = {
+          ...data ,
+
+          members: data.members || [],
+          pmcRecords: data.pmcRecords || [],
+          admins: data.admins || [],
+          recruiters: data.recruiters || [],
+          trainers: data.trainers || [],
+          missionCreators: data.missionCreators || [],
+
+          trainingRecords: [],
+          trainingHistoryRecords: [],
+          archivedTrainingRecords: []
+        };
+
+
+        /* -------------------------------- */
+        /* Initialise user interface        */
+        /* -------------------------------- */
+
+        const userName =
+          String(state.user?.name || '').trim();
+        
+        document.getElementById(
+          'dashboardWelcome'
+        ).textContent = userName
+          ? `Welcome ${userName}`
+          : 'Welcome User';
+
+        document.getElementById('appName').textContent = data.appName;
+        document.getElementById('userDisplay').textContent = data.user.email || 'Signed-in user';
+
+        /* -------------------------------- */
+        /* Render initial application       */
+        /* -------------------------------- */
+
+        updateDashboard();
+        renderMembers();
+        renderPMC();
+        populateMemberSelectors();
+        applyPermissions();
+
+        /* -------------------------------- */
+        /* Initial load complete            */
+        /* -------------------------------- */
+        document.body.classList.remove(
+          'app-loading'
+        );
+        loadingDialog.close();
+      })
+      .withFailureHandler(error => {
+        /*
+         * Always close the loading dialog,
+         * otherwise a failed bootstrap would
+         * leave the application permanently
+         * blocked.
+         */
+        document.body.classList.remove(
+          'app-loading'
+        );
+        if (loadingDialog.open) {
+          loadingDialog.close();
+        }
+        showError(error);
+      })
+      .getBootstrapData();
+  };
+  
+  document.querySelectorAll('nav button').forEach(button => {
+    button.addEventListener('click', () => {
+  
+      document
+        .querySelectorAll('nav button')
+        .forEach(b => b.classList.remove('active'));
+  
+      document
+        .querySelectorAll('.section')
+        .forEach(s => s.classList.remove('active'));
+  
+      button.classList.add('active');
+  
+      const section =
+        button.dataset.section;
+  
+      document
+        .getElementById(section)
+        .classList.add('active');
+  
+      // Auto-load training data when opening
+      // the Training page for the first time.
+      if (
+        section === 'training' &&
+        state.trainingRecords.length === 0
+      ) {
+        loadTrainingArea();
+      }
+    });
+  });
+
+  document.getElementById('memberSearch').addEventListener('input', renderMembers);
+
+  function applyPermissions() {
+    document.getElementById('addMemberButton').style.display =
+      state.permissions.isAdmin ? '' : 'none';
+
+    document.getElementById('addPMCButton').style.display =
+      state.permissions.isAdmin || state.permissions.isMissionCreator ? '' : 'none';
+
+    document.getElementById('editTrainingButton').style.display =
+      state.permissions.isTrainer ? '' : 'none';
+    
+    document.getElementById('adminNavButton').style.display =
+      state.permissions.isAdmin ? '' : 'none';
+
+    // Only admins can see Training Type
+    document.getElementById('trainingTypeRow').style.display =
+      state.permissions.isAdmin ? '' : 'none';
+  };
+
+  const appLoadingDialog =
+    document.getElementById(
+      'appLoadingDialog'
+    );
+  
+  appLoadingDialog.addEventListener(
+    'cancel',
+    event => {
+      event.preventDefault();
+    }
+  );
+  
+  document.addEventListener(
+    'keydown',
+    event => {
+      if (
+        document.body.classList.contains(
+          'app-loading'
+        )
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    },
+    true
+  );
+
+  function openAccountSwitchDialog() {
+    document
+      .getElementById(
+        'accountSwitchDialog'
+      )
+      .showModal();
+  }
+
+  function switchGoogleAccount() {
+    const chooserUrl =
+      [
+        'https:',
+        '',
+        'accounts.google.com',
+        'AccountChooser'
+      ].join('/');
+
+    window.top.location.href =
+      chooserUrl;
+  }
+
+  boot();
+</script>

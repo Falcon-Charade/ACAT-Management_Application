@@ -1,0 +1,704 @@
+<!--
+  @file Styles.html
+  @description Defines the shared visual design and responsive layout for the
+  ACAT Management Application frontend.
+
+  Responsibilities:
+  - Styles the application header, navigation, content layout, and dashboard.
+  - Defines reusable buttons, forms, tables, cards, and feedback messages.
+  - Styles dialogs, loading indicators, member details, and name lists.
+  - Provides member combobox, training chart, and role editor presentation.
+  - Adapts dashboard and navigation layouts for smaller screens.
+
+  Important:
+  - Many selectors correspond directly to classes and IDs in the frontend HTML.
+  - Renaming a selector requires updating the associated HTML or JavaScript.
+  - Dialog styling relies on the browser's native HTML dialog element.
+  - Loading animations depend on the `spin` and `dialog-enter` keyframes.
+  - Responsive layout changes occur at 800px and 600px viewport widths.
+  - Keep shared component styles consistent when adding new interface sections.
+
+  Dependencies:
+  - Frontend HTML elements using the classes and IDs defined in this file.
+  - The Inter font when available, with Arial and sans-serif fallbacks.
+  - Browser support for CSS Grid, Flexbox, animations, and HTML dialogs.
+-->
+
+<style>
+  :root {
+    font-family: Inter, Arial, sans-serif;
+    color: #1f2937;
+    background: #f3f4f6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+  }
+
+  header {
+    background: #111827;
+    color: white;
+    padding: 18px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  header h1 {
+    margin: 0;
+    font-size: 22px;
+  }
+
+  .user {
+    font-size: 13px;
+    opacity: .8;
+  }
+
+  .user-area {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  
+  .user {
+    font-size: 13px;
+    opacity: .8;
+  }
+  
+  .sign-out-button {
+    padding: 7px 10px;
+    border: 1px solid rgba(255,255,255,.35);
+    border-radius: 7px;
+  
+    background: transparent;
+    color: white;
+  
+    cursor: pointer;
+    font-size: 13px;
+  }
+  
+  .sign-out-button:hover {
+    background: rgba(255,255,255,.1);
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    min-height: calc(100vh - 64px);
+  }
+
+  nav {
+    background: white;
+    border-right: 1px solid #e5e7eb;
+    padding: 18px 12px;
+  }
+
+  nav button {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    padding: 12px;
+    border-radius: 8px;
+    text-align: left;
+    cursor: pointer;
+    margin-bottom: 4px;
+    font-size: 14px;
+  }
+
+  nav button:hover,
+  nav button.active {
+    background: #eef2ff;
+  }
+
+  main {
+    padding: 24px;
+    overflow: auto;
+  }
+
+  .section {
+    display: none;
+  }
+
+  .section.active {
+    display: block;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .dashboard-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  @media (max-width: 800px) {
+    .dashboard-cards {
+    grid-template-columns: 1fr;
+    }
+  }
+
+  .card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 18px;
+  }
+
+  .metric {
+    font-size: 30px;
+    font-weight: 700;
+    margin-top: 8px;
+  }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .button-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-right: 7px;
+  
+    border: 2px solid rgba(255,255,255,.4);
+    border-top-color: white;
+    border-radius: 50%;
+  
+    vertical-align: -2px;
+  
+    animation: spin 0.8s linear infinite;
+  }
+
+  input,
+  select,
+  button.action {
+    padding: 9px 11px;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    background: white;
+  }
+
+  button.action {
+    cursor: pointer;
+  }
+
+  button.action:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  button.primary {
+    background: #111827;
+    color: white;
+    border-color: #111827;
+  }
+
+  button.danger {
+    background: #b91c1c;
+    color: white;
+    border-color: #b91c1c;
+  }
+
+  dialog.wide-dialog {
+    width: min(950px, calc(100vw - 32px));
+  }
+
+  #archivedTrainingResults {
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  th, td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #e5e7eb;
+    text-align: left;
+    vertical-align: top;
+    font-size: 14px;
+  }
+
+  th {
+    background: #f9fafb;
+  }
+
+  .muted {
+    color: #6b7280;
+  }
+
+  .error {
+    background: #fee2e2;
+    color: #991b1b;
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    display: none;
+  }
+
+  .success {
+    background: #dcfce7;
+    color: #166534;
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    display: none;
+  }
+
+  dialog {
+    border: none;
+    border-radius: 12px;
+    padding: 0;
+    width: min(520px, calc(100vw - 32px));
+    box-shadow: 0 25px 60px rgba(0,0,0,.25);
+  }
+
+  dialog::backdrop {
+    background: rgba(0,0,0,.4);
+  }
+
+  .dialog-body {
+    padding: 20px;
+  }
+
+
+  .dialog-feedback {
+    margin-bottom: 16px;
+  }
+  
+  .dialog-feedback:empty {
+    display: none;
+  }
+  
+  .dialog-feedback .error,
+  .dialog-feedback .success {
+    display: block;
+    margin-bottom: 10px;
+  }
+
+  .name-dialog {
+    width: min(520px, calc(100vw - 32px));
+    padding: 0;
+    border: 1px solid #e5e7eb;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow:
+    0 24px 60px rgba(15, 23, 42, 0.2),
+    0 8px 20px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+  }
+  
+  .name-dialog::backdrop {
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(4px);
+  }
+  
+  .name-dialog[open] {
+    animation: dialog-enter 160ms ease-out;
+  }
+  
+  @keyframes dialog-enter {
+    from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+    }
+  
+    to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    }
+  }
+  
+  .name-dialog-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 22px 24px 18px;
+    border-bottom: 1px solid #eef2f7;
+  }
+  
+  .name-dialog-header h3 {
+    margin: 3px 0 0;
+    color: #111827;
+    font-size: 20px;
+  }
+  
+  .name-dialog-eyebrow {
+    color: #6366f1;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  
+  .dialog-close {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 0;
+    border-radius: 9px;
+    background: #f3f4f6;
+    color: #4b5563;
+    cursor: pointer;
+    font-size: 24px;
+    line-height: 1;
+    place-items: center;
+  }
+  
+  .dialog-close:hover {
+    background: #e5e7eb;
+    color: #111827;
+  }
+  
+  .name-view-results {
+    max-height: min(430px, 55vh);
+    padding: 20px 24px;
+    overflow-y: auto;
+  }
+  
+  .name-list {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  
+  .name-list-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 13px;
+    border: 1px solid #e5e7eb;
+    border-radius: 11px;
+    background: #f9fafb;
+  }
+  
+  .name-avatar {
+    display: grid;
+    flex: 0 0 34px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: #e0e7ff;
+    color: #4338ca;
+    font-size: 14px;
+    font-weight: 700;
+    place-items: center;
+  }
+  
+  .name-text {
+    color: #1f2937;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  
+  .name-empty {
+    padding: 32px 20px;
+    border: 1px dashed #d1d5db;
+    border-radius: 12px;
+    color: #6b7280;
+    text-align: center;
+  }
+  
+  .name-dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 16px 24px;
+    border-top: 1px solid #eef2f7;
+    background: #f9fafb;
+  }
+
+  .form-row {
+    margin-bottom: 14px;
+  }
+
+  .form-row.radio-row {
+    margin-bottom: 18px;
+  }
+
+  .form-row label {
+    display: block;
+    font-size: 13px;
+    margin-bottom: 6px;
+    color: #4b5563;
+  }
+
+  .form-row input,
+  .form-row select {
+    width: 100%;
+  }
+
+  .form-row .radio-option input[type="radio"] {
+    width: auto;
+    margin: 0;
+  }
+
+  .form-row .radio-option label {
+    display: inline;
+    margin: 0;
+    cursor: pointer;
+  }
+
+  .form-row textarea {
+    width: 100%;
+    padding: 9px 11px;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    font: inherit;
+    resize: vertical;
+  }
+
+  .radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  .radio-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-top: 10px;
+  }
+
+  .loading-dialog-body {
+    text-align: center;
+    padding: 32px;
+    min-width: 280px;
+  }
+
+  body.app-loading header,
+  body.app-loading .layout {
+    pointer-events: none;
+    user-select: none;
+  }
+  
+  body.app-loading {
+    overflow: hidden;
+  }
+  
+  #appLoadingDialog {
+    pointer-events: auto;
+  }
+
+  .app-loading-dialog {
+    width: min(360px, calc(100vw - 32px));
+  }
+  
+  .app-loading-dialog::backdrop {
+    background: rgba(17, 24, 39, 0.65);
+    backdrop-filter: blur(3px);
+  }
+
+  .spinner {
+    width: 40px;
+    height: 40px;
+    margin: 0 auto 18px auto;
+    border: 4px solid #e5e7eb;
+    border-top-color: #111827;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  .member-details {
+    margin-top: 18px;
+  }
+  
+  .member-detail-row {
+    display: grid;
+    grid-template-columns: minmax(160px, 40%) 1fr;
+    gap: 16px;
+  
+    padding: 10px 0;
+  
+    border-bottom: 1px solid #e5e7eb;
+  }
+  
+  .member-detail-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #4b5563;
+  }
+  
+  .member-detail-value {
+    font-size: 14px;
+    overflow-wrap: anywhere;
+  }
+
+  .member-combobox {
+    position: relative;
+    width: 100%;
+  }
+  
+  .member-combobox > input {
+    box-sizing: border-box;
+    width: 100%;
+  }
+  
+  .member-suggestions {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 100;
+    box-sizing: border-box;
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 6px;
+    background: #fff;
+    color: #1f2937;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 12px 28px rgb(15 23 42 / 15%);
+  }
+  
+  .member-suggestions[hidden] {
+    display: none;
+  }
+  
+  .member-option {
+    padding: 10px 12px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+  
+  .member-option:hover,
+  .member-option[aria-selected="true"] {
+    background: #eef2ff;
+    color: #4338ca;
+  }
+  
+  .member-no-results {
+    padding: 10px 12px;
+    color: #64748b;
+    font-size: 14px;
+  }
+
+  #pmcAddDialog {
+    min-height: 420px;
+  }
+
+  .checkbox-option {
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+  
+  .form-row .checkbox-option input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+  }
+
+  .chart-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: end;
+    margin: 20px 0;
+  }
+  
+  .chart-controls > div {
+    min-width: 140px;
+  }
+  
+  .chart-controls label {
+    display: block;
+    font-size: 13px;
+    margin-bottom: 6px;
+    color: #4b5563;
+  }
+  
+  .chart-controls input,
+  .chart-controls select {
+    width: 100%;
+  }
+  
+  .training-chart-card {
+    margin-top: 20px;
+  }
+  
+  @media (max-width: 600px) {
+    .member-detail-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    }
+  }
+
+  @keyframes spin {
+    to {
+    transform: rotate(360deg);
+    }
+  }
+
+  @media (max-width: 800px) {
+    .layout {
+    grid-template-columns: 1fr;
+    }
+
+    nav {
+    display: flex;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid #e5e7eb;
+    }
+
+    nav button {
+    width: auto;
+    white-space: nowrap;
+    }
+  }
+
+  #trainingGraphDialog {
+    width: min(1100px, calc(100vw - 32px));
+  }
+  
+  #trainingGraphDialog #trainingChart {
+    width: 100%;
+    min-height: 400px;
+  }
+
+  .role-editor-table input[type="text"],
+  .role-editor-table input[type="email"],
+  .role-editor-table input:not([type]) {
+    width: 100%;
+    min-width: 170px;
+  }
+  
+  .role-checkbox-cell {
+    text-align: center;
+  }
+  
+  .role-checkbox-cell input {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+  }
+</style>
