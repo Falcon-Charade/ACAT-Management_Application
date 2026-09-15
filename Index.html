@@ -260,6 +260,7 @@
       padding: 20px;
     }
 
+
     .dialog-feedback {
       margin-bottom: 16px;
     }
@@ -4933,6 +4934,7 @@
   
         editableRoleRecords = updatedRecords || [];
         renderRoleEditor();
+        refreshRoleNames();
   
         showSuccess('User roles updated.');
       })
@@ -6782,6 +6784,28 @@ const feedbackTimers = new WeakMap();
     requestAnimationFrame(() => {
       google.charts.setOnLoadCallback(loadTrainingChart);
     });
+  }
+
+  function refreshRoleNames() {
+    google.script.run
+      .withSuccessHandler(config => {
+  
+        state.admins =
+          config['Administrator'] || [];
+  
+        state.recruiters =
+          config['Recruiter'] || [];
+  
+        state.trainers =
+          config['Trainer'] || [];
+  
+        state.missionCreators =
+          config['Mission Creator'] || [];
+  
+        updateDashboard();
+      })
+      .withFailureHandler(showError)
+      .updateRoleNamesConfig();
   }
 
   boot();
