@@ -11,7 +11,7 @@ const INDEX_PATH = path.join(FRONTEND_ROOT, 'Index.html');
 
 function processIncludes(html) {
   return html.replace(
-    /<\?!=\s*include\(['"](.+?)['"]\);\s*\?>/g,
+    /<\?!=\s*include_\(['"](.+?)['"]\);\s*\?>/g,
     (_, filename) => {
       const filePath = path.join(
         FRONTEND_ROOT,

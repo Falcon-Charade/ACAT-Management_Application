@@ -29,7 +29,7 @@
 
   Dependencies:
   - Shared application state from App.html.
-  - Google Apps Script `google.script.run` client API.
+  - Google Apps Script `acatRun()` client API.
   - Server-side training configuration, archive, history, and role-management
     functions.
   - Training refresh and chart functions from Training.html.
@@ -55,7 +55,7 @@
     ).innerHTML =
       '<div class="muted">Loading configuration...</div>';
 
-    google.script.run
+    acatRun()
       .withSuccessHandler(renderTrainingConfig)
       .withFailureHandler(showError)
       .getTrainingConfig();
@@ -127,7 +127,7 @@
       return;
     }
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(config => {
   
         document
@@ -198,7 +198,7 @@
               class="action"
               onclick="openTrainingConfigEditor(
                 JSON.parse(
-                  decodeURIComponent('${encoded}')
+                  decodeURIComponent(${escapeJsArgument(encoded)})
                 )
               )"
             >
@@ -246,7 +246,7 @@
   
     dialog.showModal();
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(records => {
   
         state.archivedTrainingRecords =
@@ -366,7 +366,7 @@
             <button
               class="action primary"
               onclick="unarchiveTraining(
-                '${escapeAttr(record.area)}',
+                ${escapeJsArgument(record.area)},
                 ${record.row},
                 this
               )"
@@ -377,9 +377,9 @@
             <button
               class="action danger"
               onclick="deleteArchivedTraining(
-                '${escapeAttr(record.area)}',
+                ${escapeJsArgument(record.area)},
                 ${record.row},
-                '${escapeAttr(record.memberName)}',
+                ${escapeJsArgument(record.memberName)},
                 this
               )"
             >
@@ -424,7 +424,7 @@
     button.innerHTML =
       '<span class="button-spinner"></span>Unarchiving...';
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(records => {
   
         state.archivedTrainingRecords =
@@ -499,7 +499,7 @@
     button.innerHTML =
       '<span class="button-spinner"></span>Deleting...';
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(records => {
   
         state.archivedTrainingRecords =
@@ -627,7 +627,7 @@
     ).innerHTML =
       '<div class="muted">Searching training history...</div>';
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(records => {
   
         button.disabled = false;
@@ -787,7 +787,7 @@
     button.innerHTML =
       `<span class="button-spinner"></span>${action}ing...`;
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(() => {
   
         showSuccess(
@@ -840,7 +840,7 @@
     button.innerHTML =
       '<span class="button-spinner"></span>Deleting...';
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(() => {
   
         showSuccess(
@@ -875,7 +875,7 @@
       return;
     }
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(records => {
         editableRoleRecords = records || [];
         renderRoleEditor();
@@ -1002,7 +1002,7 @@
     button.disabled = true;
     button.textContent = 'Saving...';
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(updatedRecords => {
         button.disabled = false;
         button.textContent = 'Save Changes';

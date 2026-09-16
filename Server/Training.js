@@ -30,7 +30,7 @@
  * - Google Apps Script Spreadsheet, Session, and Utilities services.
  */
 
-function getTrainingForMember(memberName) {
+function getTrainingForMember_(memberName) {
   const ss = getTrainingSpreadsheet_();
   const results = [];
 
@@ -77,7 +77,7 @@ function getTrainingForMember(memberName) {
   return results;
 }
 
-function getTrainingByArea(area) {
+function getTrainingByArea_(area) {
   const ss =
     getTrainingSpreadsheet_();
 
@@ -181,13 +181,13 @@ function getTrainingByArea(area) {
   return results;
 }
 
-function upsertTrainingRecord(payload) {
+function upsertTrainingRecord_(payload) {
   requireTrainer_();
 
   const memberName = String(payload?.memberName || '').trim();
   const trainingSheet = String(payload?.trainingSheet || '').trim();
 
-  const permissions = getPermissions();
+  const permissions = getPermissions_();
   const requestedTrainer =
     payload?.isTrainerRecord  === true;
 
@@ -366,10 +366,10 @@ function upsertTrainingRecord(payload) {
     );
   }
     
-  return getTrainingForMember(memberName);
+  return getTrainingForMember_(memberName);
 }
 
-function archiveTrainingRecord(
+function archiveTrainingRecord_(
   trainingArea,
   rowNumber
 ) {
@@ -558,12 +558,12 @@ function archiveTrainingRecord(
     );
   }
 
-  return getTrainingByArea(
+  return getTrainingByArea_(
     trainingArea
   );
 }
 
-function unarchiveTrainingRecord(
+function unarchiveTrainingRecord_(
   trainingArea,
   rowNumber
 ) {
@@ -733,7 +733,7 @@ function unarchiveTrainingRecord(
     );
   }
 
-  return getArchivedTrainingRecords();
+  return getArchivedTrainingRecords_();
 }
 
 function addTrainingHistory_(
@@ -751,7 +751,7 @@ function addTrainingHistory_(
   );
 
   // Find the member ID from the main member database
-  const members = getMembers();
+  const members = getMembers_();
 
   const member = members.find(m =>
     String(m['Member Name'] || '')
@@ -830,7 +830,7 @@ function archiveMatchingTrainingHistory_(
    * Prefer Member Id as the identity.
    */
   const members =
-    getMembers();
+    getMembers_();
 
   const member =
     members.find(item =>
@@ -993,7 +993,7 @@ function unarchiveMatchingTrainingHistory_(
   }
 
   const members =
-    getMembers();
+    getMembers_();
 
   const member =
     members.find(item =>
@@ -1093,7 +1093,7 @@ function unarchiveMatchingTrainingHistory_(
   );
 }
 
-function searchTrainingHistory(
+function searchTrainingHistory_(
   fromDateString,
   toDateString,
   memberName,
@@ -1323,7 +1323,7 @@ function searchTrainingHistory(
     });
 }
 
-function setTrainingHistoryArchived(
+function setTrainingHistoryArchived_(
   rowNumber,
   archived
 ) {
@@ -1376,7 +1376,7 @@ function setTrainingHistoryArchived(
   return true;
 }
 
-function deleteTrainingHistoryRecord(
+function deleteTrainingHistoryRecord_(
   rowNumber
 ) {
   requireAdmin_();

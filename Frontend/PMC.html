@@ -31,7 +31,7 @@
 
   Dependencies:
   - Shared `state` and `pendingArchivedPMC` values from App.html.
-  - Google Apps Script `google.script.run` client API.
+  - Google Apps Script `acatRun()` client API.
   - Server-side PMC creation, update, archive, restore, and deletion functions.
   - Shared member-selection, escaping, notification, and dashboard utilities.
   - PMC tables, forms, buttons, and dialogs defined in Index.html.
@@ -106,7 +106,7 @@
               class="action"
               onclick="archivePMC(
                 ${item._row},
-                '${escapeAttr(item['Member Name'] || '')}',
+                ${escapeJsArgument(item['Member Name'] || '')},
                 this
               )"
             >
@@ -151,7 +151,7 @@
     saveButton.innerHTML =
       '<span class="button-spinner"></span>Saving...';
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(result => {
 
         saveButton.disabled = false;
@@ -271,7 +271,7 @@
         )
     };
 
-    google.script.run
+    acatRun()
       .withSuccessHandler(records => {
         button.disabled = false;
         button.textContent = 'Save';
@@ -361,7 +361,7 @@
     button.innerHTML =
       '<span class="button-spinner"></span>Archiving...';
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(records => {
   
         state.pmcRecords =
@@ -396,7 +396,7 @@
     button.innerHTML =
       '<span class="button-spinner"></span>Deleting...';
 
-    google.script.run
+    acatRun()
       .withSuccessHandler(records => {
 
         state.pmcRecords = records;
@@ -431,7 +431,7 @@
     button.innerHTML =
       '<span class="button-spinner"></span>Unarchiving...';
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(records => {
   
         state.pmcRecords =
@@ -492,7 +492,7 @@
     button.innerHTML =
       '<span class="button-spinner"></span>Creating...';
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(records => {
 
         button.disabled = false;

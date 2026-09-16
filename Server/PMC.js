@@ -30,7 +30,7 @@
  * - Google Apps Script Spreadsheet service.
  */
 
-function getPMCRecords() {
+function getPMCRecords_() {
   const sheet = getPMCSpreadsheet_().getSheetByName(
     CONFIG.SHEETS.PMCS
   );
@@ -47,7 +47,7 @@ function getPMCRecords() {
     );
 }
 
-function addPMCRecord(memberName) {
+function addPMCRecord_(memberName) {
   requireMissionCreatorOrAdmin_();
 
   memberName = String(memberName || '').trim();
@@ -57,7 +57,7 @@ function addPMCRecord(memberName) {
   }
 
   const member =
-    getMembers().find(item =>
+    getMembers_().find(item =>
       String(
         item['Member Name'] || ''
       )
@@ -218,11 +218,11 @@ function addPMCRecord(memberName) {
 
   return {
     status: 'created',
-    records: getPMCRecords()
+    records: getPMCRecords_()
   };
 }
 
-function updatePMCRecord(rowNumber, updates) {
+function updatePMCRecord_(rowNumber, updates) {
   requireMissionCreatorOrAdmin_();
 
   const sheet = getSheetOrThrow_(
@@ -401,10 +401,10 @@ function updatePMCRecord(rowNumber, updates) {
     )
     .setValue(goodMissions);
 
-  return getPMCRecords();
+  return getPMCRecords_();
 }
 
-function archivePMCRecord(rowNumber) {
+function archivePMCRecord_(rowNumber) {
   requireAdmin_();
 
   const sheet =
@@ -448,10 +448,10 @@ function archivePMCRecord(rowNumber) {
     )
     .setValue(true);
 
-  return getPMCRecords();
+  return getPMCRecords_();
 }
 
-function unarchivePMCRecord(rowNumber) {
+function unarchivePMCRecord_(rowNumber) {
   requireAdmin_();
 
   const sheet =
@@ -495,10 +495,10 @@ function unarchivePMCRecord(rowNumber) {
     )
     .setValue(false);
 
-  return getPMCRecords();
+  return getPMCRecords_();
 }
 
-function deletePMCRecord(rowNumber) {
+function deletePMCRecord_(rowNumber) {
   requireAdmin_();
 
   const sheet = getSheetOrThrow_(
@@ -518,5 +518,5 @@ function deletePMCRecord(rowNumber) {
 
   sheet.deleteRow(rowNumber);
 
-  return getPMCRecords();
+  return getPMCRecords_();
 }

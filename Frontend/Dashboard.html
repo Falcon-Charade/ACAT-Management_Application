@@ -24,7 +24,7 @@
 
   Dependencies:
   - Shared application state defined in App.html.
-  - Google Apps Script `google.script.run` client API.
+  - Google Apps Script `acatRun()` client API.
   - The server-side `updateRoleNamesConfig()` function.
   - Shared `escapeHtml()` and `showError()` utilities.
   - Dashboard counters and name-view dialog elements defined in Index.html.
@@ -51,8 +51,8 @@
     document.getElementById('newMemberCount').textContent = newMemberCount;
     document.getElementById('applicantCount').textContent = applicantCount;
     document.getElementById('pmcCount').textContent = state.pmcRecords?.length ?? 0;
-    document.getElementById('missionCreatorCount').textContent = state.missionCreators?.length ?? 0;
-    document.getElementById('trainerCount').textContent = state.trainers?.length ?? 0;
+    document.getElementById('missionCreatorCount').textContent = state.missionCreatorCount ?? state.missionCreators?.length ?? 0;
+    document.getElementById('trainerCount').textContent = state.trainerCount ?? state.trainers?.length ?? 0;
 
     const roles = [];
     if (state.permissions.isAdmin) roles.push('Administrator');
@@ -126,7 +126,7 @@
   }
   
   function refreshRoleNames() {
-    google.script.run
+    acatRun()
       .withSuccessHandler(config => {
   
         state.admins =
@@ -148,7 +148,7 @@
   }
 
   function refreshDashboardCounts() {
-    google.script.run
+    acatRun()
       .withSuccessHandler(data => {
 
         state.trainerCount =

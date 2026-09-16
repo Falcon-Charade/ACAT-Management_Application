@@ -27,12 +27,12 @@
  * - Google Apps Script Spreadsheet service.
  */
 
-function getMembers() {
+function getMembers_() {
   const sheet = getSheetOrThrow_(getMemberSpreadsheet_(), CONFIG.SHEETS.MEMBERS);
   return rowsToObjects_(sheet);
 }
 
-function addMember(member) {
+function addMember_(member) {
   requireAdmin_();
 
   const name = String(member?.name || '').trim();
@@ -155,10 +155,10 @@ function addMember(member) {
 
   sheet.appendRow(row);
 
-  return getMembers();
+  return getMembers_();
 }
 
-function updateMember(
+function updateMember_(
   memberId,
   updates
 ) {
@@ -538,10 +538,10 @@ function updateMember(
   /* Return refreshed data            */
   /* -------------------------------- */
 
-  return getMembers();
+  return getMembers_();
 }
 
-function deleteMember(memberId) {
+function deleteMember_(memberId) {
   requireRecruiterOrAdmin_();
 
   const sheet = getSheetOrThrow_(getMemberSpreadsheet_(), CONFIG.SHEETS.MEMBERS);
@@ -552,7 +552,7 @@ function deleteMember(memberId) {
   }
 
   sheet.deleteRow(rowNumber);
-  return getMembers();
+  return getMembers_();
 }
 
 function findMemberRowById_(memberId) {

@@ -13,7 +13,7 @@
   - Shows or hides interface controls according to the user's permissions.
   - Blocks interaction while the application is loading.
   - Restores the interface and displays an error if initialization fails.
-  - Opens the account-switch dialog and redirects to Google's Account Chooser.
+  - Manages GIS identity-only sign-in, ACAT sessions and sign-out.
 
   Important:
   - `state` is shared by the application's frontend modules.
@@ -26,12 +26,12 @@
     functions have been defined.
 
   Dependencies:
-  - Google Apps Script `google.script.run` client API.
+  - Google Apps Script `acatRun()` client API.
   - The server-side `getBootstrapData()` function.
   - Dashboard, member, PMC, training, selector, and notification functions.
   - Navigation, loading-dialog, user-display, and permission-controlled elements
     defined in Index.html.
-  - Google Account Chooser for switching the active Google account.
+  - Google Identity Services for optional identity-only sign-in.
 -->
 
 <script>
@@ -52,6 +52,161 @@
   let viewedMember = null;
   let pendingArchivedPMC = null;
 
+  // Only this transport carries the opaque ACAT session. Never send identity claims.
+  let authEpoch = 0;
+  let sessionToken = '';
+  let expiryTimer;
+  let signInGeneration = 0;
+  let authExpiresAt = 0;
+  let googleSignInFrame = null;
+  let pendingGoogleSignIn = null;
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('acat.session') || 'null');
+    if (saved?.expiresAt > Date.now()) {
+      sessionToken = saved.token;
+      authExpiresAt = saved.expiresAt;
+    }
+  } catch (_) { /* Storage may be unavailable; memory-only sessions still work. */ }
+
+  function acatRun(success, failure, userObject) {
+    return new Proxy({}, {get(_target, property) {
+      if (property === 'withSuccessHandler') return fn => acatRun(fn, failure, userObject);
+      if (property === 'withFailureHandler') return fn => acatRun(success, fn, userObject);
+      if (property === 'withUserObject') return value => acatRun(success, failure, value);
+      return (...args) => {
+        const epoch = authEpoch;
+        google.script.run.withSuccessHandler(result => {
+          if (epoch === authEpoch) success?.(result, userObject);
+        }).withFailureHandler(error => {
+          if (epoch !== authEpoch) return;
+          if (/AUTH_EXPIRED|AUTH_REQUIRED|ACCESS_DENIED/.test(error?.message || '')) {
+            signOutACAT();
+          }
+          (failure || showError)(error, userObject);
+        }).api(String(property), args, sessionToken);
+      };
+    }});
+  }
+
+  function renderAuthState() {
+    document.getElementById('userDisplay').textContent = state.user?.email || 'Read-only access';
+    document.getElementById('authStatus').textContent = state.user?.roles?.join(', ') || 'Read-only access';
+    document.getElementById('signOutButton').hidden = !state.user?.authenticated;
+    document.getElementById('googleSignIn').hidden = Boolean(state.user?.authenticated);
+    clearTimeout(expiryTimer);
+    if (sessionToken && authExpiresAt) {
+      expiryTimer = setTimeout(signOutACAT, Math.max(0, authExpiresAt - Date.now()));
+    }
+  }
+
+  function clearAccessState() {
+    ++authEpoch;
+    ++signInGeneration;
+    clearTimeout(expiryTimer);
+    sessionToken = '';
+    authExpiresAt = 0;
+    try { sessionStorage.removeItem('acat.session'); } catch (_) {}
+    state = {members: [], pmcRecords: [], trainingSheets: state.trainingSheets || [],
+      trainingRecords: [], trainingHistoryRecords: [], archivedTrainingRecords: [],
+      permissions: {}, admins: [], trainers: [], recruiters: [], missionCreators: []};
+    viewedMember = null;
+    pendingArchivedPMC = null;
+    editableRoleRecords = [];
+    document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
+    document.querySelectorAll('dialog input, dialog textarea').forEach(input => {
+      input.value = ''; input.checked = false;
+    });
+    document.querySelectorAll('[id$="Table"], [id$="Results"], [id$="Contents"], #memberEditFields, #memberExtraFields, #roleRecordsTable').forEach(el => { el.innerHTML = ''; });
+    document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+    document.getElementById('dashboard').classList.add('active');
+    document.querySelectorAll('nav button').forEach(el => el.classList.toggle('active', el.dataset.section === 'dashboard'));
+    applyPermissions();
+    renderAuthState();
+    renderMembers();
+    renderPMC();
+    updateDashboard();
+    populateMemberSelectors();
+  }
+
+  function signOutACAT() {
+    const oldToken = sessionToken;
+    const wasAuthenticated = state.user?.authenticated;
+    clearAccessState();
+    googleSignInFrame?.remove();
+    googleSignInFrame = null;
+    pendingGoogleSignIn = null;
+    if (oldToken || wasAuthenticated) {
+      google.script.run.withFailureHandler(() => {
+        showError('Signed out locally. Server session invalidation failed; it expires within 30 minutes.');
+      }).logoutSession(oldToken);
+    }
+    boot();
+    initializeGoogleSignIn();
+  }
+
+  function initializeGoogleSignIn() {
+    const generation = ++signInGeneration;
+    const container = document.getElementById('googleSignIn');
+    container.textContent = '';
+    google.script.run.withSuccessHandler(config => {
+      if (generation !== signInGeneration) return;
+      if (!config.clientId) {
+        container.textContent = 'Google sign-in is not configured.';
+        return;
+      }
+      if (!config.signInUrl) {
+        container.textContent = 'Google sign-in is not configured.';
+        return;
+      }
+      const verifierOrigin = new URL(config.signInUrl).origin;
+      pendingGoogleSignIn = {generation, nonce: config.nonce, verifierOrigin};
+      const frame = document.createElement('iframe');
+      frame.title = 'Sign in with Google';
+      frame.src = `${config.signInUrl}?nonce=${encodeURIComponent(config.nonce)}&embed=1`;
+      frame.width = '230';
+      frame.height = '44';
+      frame.style.border = '0';
+      frame.style.display = 'block';
+      frame.setAttribute('allow', 'identity-credentials-get');
+      googleSignInFrame = frame;
+      container.appendChild(frame);
+    }).withFailureHandler(() => {
+      if (generation === signInGeneration) container.textContent = 'Google sign-in is temporarily unavailable.';
+    }).getAuthConfig();
+  }
+
+  window.addEventListener('message', event => {
+    const pending = pendingGoogleSignIn;
+    if (!pending || event.origin !== pending.verifierOrigin ||
+        event.source !== googleSignInFrame?.contentWindow ||
+        event.data?.type !== 'acat-google-credential' ||
+        event.data?.nonce !== pending.nonce ||
+        typeof event.data?.credential !== 'string') {
+      return;
+    }
+    pendingGoogleSignIn = null;
+    googleSignInFrame?.remove();
+    googleSignInFrame = null;
+    const generation = pending.generation;
+    google.script.run.withSuccessHandler(result => {
+      if (generation !== signInGeneration) {
+        google.script.run.logoutSession(result.sessionToken);
+        return;
+      }
+      clearAccessState();
+      sessionToken = result.sessionToken;
+      authExpiresAt = result.expiresAt;
+      try {
+        sessionStorage.setItem('acat.session', JSON.stringify({token: sessionToken, expiresAt: authExpiresAt}));
+      } catch (_) {}
+      boot();
+    }).withFailureHandler(error => {
+      if (generation !== signInGeneration) return;
+      showError(error);
+      initializeGoogleSignIn();
+    }).authenticateGoogleUser(event.data.credential, pending.nonce);
+  });
+
   function boot() {
     const loadingDialog =
       document.getElementById(
@@ -64,7 +219,7 @@
 
     loadingDialog.showModal();
 
-    google.script.run
+    acatRun()
       .withSuccessHandler(data => {
         state = {
           ...data ,
@@ -96,12 +251,13 @@
           : 'Welcome User';
 
         document.getElementById('appName').textContent = data.appName;
-        document.getElementById('userDisplay').textContent = data.user.email || 'Signed-in user';
+        document.getElementById('userDisplay').textContent = data.user.email || 'Read-only access';
 
         /* -------------------------------- */
         /* Render initial application       */
         /* -------------------------------- */
 
+        renderAuthState();
         updateDashboard();
         renderMembers();
         renderPMC();
@@ -212,26 +368,7 @@
     true
   );
 
-  function openAccountSwitchDialog() {
-    document
-      .getElementById(
-        'accountSwitchDialog'
-      )
-      .showModal();
-  }
-
-  function switchGoogleAccount() {
-    const chooserUrl =
-      [
-        'https:',
-        '',
-        'accounts.google.com',
-        'AccountChooser'
-      ].join('/');
-
-    window.top.location.href =
-      chooserUrl;
-  }
-
+  applyPermissions();
   boot();
+  initializeGoogleSignIn();
 </script>

@@ -1,0 +1,7 @@
+{
+  "name": "acat-auth-verifier",
+  "private": true,
+  "scripts": {"start": "node server.js", "test": "node --test test.js"},
+  "engines": {"node": ">=22"},
+  "dependencies": {"google-auth-library": "^10.0.0"}
+}

@@ -41,7 +41,7 @@
     src="https://www.gstatic.com/charts/loader.js">
   </script>
 
-  <?!= include('Styles'); ?>
+  <?!= include_('Styles'); ?>
 </head>
 
 <body>
@@ -52,12 +52,9 @@
         class="user"
         id="userDisplay"
       ></div>
-      <button
-        class="sign-out-button"
-        onclick="openAccountSwitchDialog()"
-      >
-        Change Google Account
-      </button>
+      <div id="authStatus">Read-only access</div>
+      <div id="googleSignIn"></div>
+      <button id="signOutButton" class="sign-out-button" onclick="signOutACAT()" hidden>Sign out</button>
     </div>
   </header>
 
@@ -68,7 +65,7 @@
       <button data-section="training">Training</button>
       <button data-section="pmc">PMCs</button>
       <button
-        id="adminNavButton"
+        id="adminNavButton" style="display:none"
         data-section="administration"
       >
         Administration
@@ -219,7 +216,7 @@
           </select>
         
           <button
-            id="addMemberButton"
+            id="addMemberButton" style="display:none"
             class="action primary"
             onclick="openAddMember()"
           >
@@ -260,7 +257,7 @@
           </button>
       
           <button
-            id="editTrainingButton"
+            id="editTrainingButton" style="display:none"
             class="action primary"
             onclick="openTrainingEditor()"
           >
@@ -285,7 +282,7 @@
 
         <div class="toolbar">
           <button
-            id="addPMCButton"
+            id="addPMCButton" style="display:none"
             class="action primary"
             onclick="openAddPMC()"
           >
@@ -989,44 +986,7 @@
     </div>
   </dialog>
 
-  <dialog id="accountSwitchDialog">
-    <div class="dialog-body">
-  
-      <h3>Change Google Account</h3>
-  
-      <p>
-        Google Apps Script does not reliably support switching between
-        multiple signed-in Google accounts inside the same browser session.
-      </p>
-  
-      <p class="muted">
-        To use a different account, open Google's account chooser. You may
-        need to reopen the ACAT app afterward, or use a private/incognito
-        window with only the desired account signed in.
-      </p>
-  
-      <div class="dialog-actions">
-  
-        <button
-          class="action"
-          onclick="document.getElementById('accountSwitchDialog').close()"
-        >
-          Cancel
-        </button>
-  
-        <button
-          class="action primary"
-          onclick="switchGoogleAccount()"
-        >
-          Open Account Chooser
-        </button>
-  
-      </div>
-  
-    </div>
-  </dialog>
-
-  <dialog id="nameViewDialog" class="name-dialog">
+<dialog id="nameViewDialog" class="name-dialog">
     <div class="name-dialog-header">
       <div>
         <h3 id="nameViewTitle">Member Usernames</h3>
@@ -1200,13 +1160,13 @@
     </div>
   </dialog>
 
-  <?!= include('Utils'); ?>
-  <?!= include('Dashboard'); ?>
-  <?!= include('Members'); ?>
-  <?!= include('Training'); ?>
-  <?!= include('PMC'); ?>
-  <?!= include('Admin'); ?>
-  <?!= include('App'); ?>
+  <?!= include_('Utils'); ?>
+  <?!= include_('Dashboard'); ?>
+  <?!= include_('Members'); ?>
+  <?!= include_('Training'); ?>
+  <?!= include_('PMC'); ?>
+  <?!= include_('Admin'); ?>
+  <?!= include_('App'); ?>
 
 </body>
 </html>

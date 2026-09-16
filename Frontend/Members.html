@@ -31,7 +31,7 @@
 
   Dependencies:
   - Shared application state and `viewedMember` reference from App.html.
-  - Google Apps Script `google.script.run` client API.
+  - Google Apps Script `acatRun()` client API.
   - Server-side `addMember()`, `updateMember()`, and `deleteMember()` functions.
   - Shared field-building, escaping, notification, rendering, and selector
     utilities.
@@ -81,7 +81,7 @@
       return;
     }
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(members => {
   
         state.members =
@@ -385,7 +385,7 @@
             <button
               class="action"
               onclick="viewMember(
-                ${member['Member Id']}
+                ${Number(member['Member Id'])}
               )"
             >
               View
@@ -903,7 +903,7 @@
         }
       });
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(members => {
 
         const memberId =
@@ -982,7 +982,7 @@
     button.innerHTML =
       '<span class="button-spinner"></span>Deleting...';
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(members => {
   
         state.members =
@@ -1201,7 +1201,7 @@
         'Member Id'
       ];
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(members => {
   
         state.members =

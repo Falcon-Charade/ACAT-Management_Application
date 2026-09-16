@@ -58,8 +58,7 @@ const CONFIG = {
   // Training history tab
   TRAINING_HISTORY_SHEET: 'TrainingHistory',
 
-  // Optional allow-lists.
-  // If arrays are empty, access falls back to spreadsheet permissions.
+  // Optional server-side group diagnostics only. Roles sheet controls access.
 
   ADMIN_GROUPS: [
     'acat-admins@googlegroups.com'

@@ -46,6 +46,10 @@
       .replaceAll("'", '&#039;');
   }
   
+  function escapeJsArgument(value) {
+    return escapeHtml(JSON.stringify(String(value)));
+  }
+
   function escapeAttr(value) {
     return escapeHtml(value);
   }
