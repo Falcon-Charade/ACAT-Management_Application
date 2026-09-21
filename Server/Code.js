@@ -103,7 +103,6 @@ function getTrainingConfig_() {
   // Skip header row
   return values
     .slice(1)
-    .filter(row => String(row[0] || '').trim() !== '')
     .map(row => ({
       role: String(row[0]).trim(),
       expiryMonths: Number(row[1]),
@@ -636,14 +635,6 @@ function addPMCRecordIgnoringArchived_(memberName) {
 /* -------------------------------------------------------------------------- */
 /* Administration                                                             */
 /* -------------------------------------------------------------------------- */
-
-
-function getTrainingConfig_() {
-  requireAdmin_();
-
-  return getTrainingConfig_();
-}
-
 function getTrainingExpiryPreview_(trainingArea, lastDateString) {
   requireTrainer_();
 

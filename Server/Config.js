@@ -39,7 +39,7 @@ const CONFIG = {
   // Training Expiry Dates
   TRAINING_CONFIG: {
     SHEET: 'FunctionHelper',
-    RANGE: 'L1:N10'
+    RANGE: 'L2:N10'
   },
 
   // Training tabs can be expanded/renamed here.
