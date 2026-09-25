@@ -167,6 +167,8 @@
       frame.height = '44';
       frame.style.border = '0';
       frame.style.display = 'block';
+      frame.style.overflow = 'hidden';
+      frame.setAttribute('scrolling', 'no');
       frame.setAttribute('allow', 'identity-credentials-get');
       googleSignInFrame = frame;
       container.appendChild(frame);

@@ -33,9 +33,10 @@ function signInPage(nonce, embedded) {
     h1 { margin: 0 0 10px; font-size: 22px; }
     p { margin: 0 0 22px; color: #4b5563; }
     #googleButton > div { margin: auto; }
-    body.embedded { min-height: 44px; background: transparent; }
-    body.embedded main { width: auto; padding: 0; border: 0; background: transparent; }
+    body.embedded { width: 100%; height: 100%; min-height: 44px; overflow: hidden; background: transparent; }
+    body.embedded main { width: 100%; height: 100%; padding: 0; margin: 0; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; overflow: hidden; }
     body.embedded h1, body.embedded p { display: none; }
+    body.embedded #googleButton { overflow: hidden; }
   </style>
 </head>
 <body class="${embedded ? 'embedded' : ''}">
@@ -70,7 +71,7 @@ function signInPage(nonce, embedded) {
       });
       const target = document.getElementById('googleButton');
       target.textContent = '';
-      google.accounts.id.renderButton(target, {theme: 'outline', size: 'large'});
+      google.accounts.id.renderButton(target, {theme: 'outline', size: 'large', width: 230});
     };
     if (window.google?.accounts?.id) start();
     else window.addEventListener('load', start, {once: true});
