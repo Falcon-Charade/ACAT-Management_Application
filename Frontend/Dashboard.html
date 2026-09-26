@@ -60,8 +60,6 @@
     if (state.permissions.isTrainer && !state.permissions.isAdmin) roles.push('Trainer');
     if (state.permissions.isMissionCreator && !state.permissions.isAdmin) roles.push('Mission Creator');
     if (!roles.length) roles.push('Read only');
-
-    document.getElementById('permissionSummary').textContent = roles.join(', ');
   }
 
   function openNameViewDialog(role) {

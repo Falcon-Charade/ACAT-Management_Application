@@ -19,7 +19,7 @@ function api(operation, args, sessionToken) {
     searchTrainingHistory: [searchTrainingHistory_, 'admin.access'],
     setTrainingHistoryArchived: [setTrainingHistoryArchived_, 'admin.access'],
     deleteTrainingHistoryRecord: [deleteTrainingHistoryRecord_, 'admin.access'],
-    getTrainingConfig: [getTrainingConfig_, 'admin.access'], updateTrainingConfig: [updateTrainingConfig_, 'admin.access'],
+    getTrainingConfig: [getAdminTrainingConfig_, 'admin.access'], updateTrainingConfig: [updateTrainingConfig_, 'admin.access'],
     getRoleRecords: [getRoleRecords_, 'admin.access'], saveRoleRecords: [saveRoleRecords_, 'admin.access'],
     getNamesByRole: [getNamesByRole_, 'admin.access'], updateRoleNamesConfig: [updateRoleNamesConfig_, 'admin.access'],
     testGroupMembership: [testGroupMembership_, 'admin.access']
