@@ -14,7 +14,7 @@
  * - Archived records and records without a member name are excluded.
  * - Member names are compared case-insensitively.
  * - A trainer appearing in multiple training sheets is counted only once.
- * - Additional server-derived metrics can be added to `getDashboardCounts()`.
+ * - Additional server-derived metrics can be added to `getDashboardCounts_()`.
  *
  * Dependencies:
  * - `CONFIG.TRAINING_SHEETS` from Config.js.
@@ -23,14 +23,14 @@
  * - Google Apps Script Spreadsheet service.
  */
 
-function getDashboardCounts() {
+function getDashboardCounts_() {
   return {
     trainerCount:
-      getActiveTrainerCount()
+      getActiveTrainerCount_()
   };
 }
 
-function getActiveTrainerCount() {
+function getActiveTrainerCount_() {
   const ss =
     getTrainingSpreadsheet_();
 

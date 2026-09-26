@@ -41,23 +41,26 @@
     src="https://www.gstatic.com/charts/loader.js">
   </script>
 
-  <?!= include('Styles'); ?>
+  <?!= include_('Styles'); ?>
 </head>
 
 <body>
   <header>
-    <h1 id="appName">ACAT Management Application</h1>
+    <div class="app-brand">
+      <img class="app-logo"
+        src="https://raw.githubusercontent.com/Falcon-Charade/ACAT-Management_Application/main/Frontend/Images/acat_logo.png"
+        alt="ACAT Logo"
+      >
+      <h1 id="appName">ACAT Management Application</h1>
+    </div>
     <div class="user-area">
       <div
         class="user"
         id="userDisplay"
       ></div>
-      <button
-        class="sign-out-button"
-        onclick="openAccountSwitchDialog()"
-      >
-        Change Google Account
-      </button>
+      <div id="authStatus">Read-only access</div>
+      <div id="googleSignIn"></div>
+      <button id="signOutButton" class="sign-out-button" onclick="signOutACAT()" hidden>Sign out</button>
     </div>
   </header>
 
@@ -68,7 +71,7 @@
       <button data-section="training">Training</button>
       <button data-section="pmc">PMCs</button>
       <button
-        id="adminNavButton"
+        id="adminNavButton" style="display:none"
         data-section="administration"
       >
         Administration
@@ -88,9 +91,9 @@
             <div class="chart-control-button">
               <button
                 class="action primary"
-                onclick="openNameViewDialog('Admins')"
+                onclick="openNameViewDialog('Applicants')"
               >
-                View Admins
+                View Applicants
               </button>
             </div>
           </div>
@@ -99,9 +102,9 @@
             <div class="chart-control-button">
               <button
                 class="action primary"
-                onclick="openNameViewDialog('Recruiters')"
+                onclick="openNameViewDialog('NewMembers')"
               >
-                View Recruiters
+                View New Members
               </button>
             </div>
           </div>
@@ -110,9 +113,9 @@
             <div class="chart-control-button">
               <button
                 class="action primary"
-                onclick="openNameViewDialog('Trainers')"
+                onclick="openNameViewDialog('Members')"
               >
-                View Trainers
+                View Members
               </button>
             </div>
           </div>
@@ -131,9 +134,10 @@
 
         <h4>Counts</h4>
         <div class="cards dashboard-cards">
+
           <div class="card">
-            <div class="muted">Members</div>
-            <div class="metric" id="memberCount">0</div>
+            <div class="muted">Applicants</div>
+            <div class="metric" id="applicantCount">0</div>
           </div>
 
           <div class="card">
@@ -142,8 +146,8 @@
           </div>
 
           <div class="card">
-            <div class="muted">Applicants</div>
-            <div class="metric" id="applicantCount">0</div>
+            <div class="muted">Members</div>
+            <div class="metric" id="memberCount">0</div>
           </div>
 
           <div class="card">
@@ -162,10 +166,17 @@
           </div>
         </div>
 
-        <h4>Access Level</h4>
+        <h4>Training History</h4>
         <div class="card">
-          <strong>Access</strong>
-          <div id="permissionSummary" class="muted" style="margin-top:8px"></div>
+          <div class="chart-control-button">
+            <button
+              class="action"
+              style="margin-left: auto;"
+              onclick="openTrainingGraphDialog()"
+            >
+              View Training Graph
+            </button>
+          </div>
         </div>
 
       </section>
@@ -219,7 +230,7 @@
           </select>
         
           <button
-            id="addMemberButton"
+            id="addMemberButton" style="display:none"
             class="action primary"
             onclick="openAddMember()"
           >
@@ -260,7 +271,7 @@
           </button>
       
           <button
-            id="editTrainingButton"
+            id="editTrainingButton" style="display:none"
             class="action primary"
             onclick="openTrainingEditor()"
           >
@@ -285,7 +296,7 @@
 
         <div class="toolbar">
           <button
-            id="addPMCButton"
+            id="addPMCButton" style="display:none"
             class="action primary"
             onclick="openAddPMC()"
           >
@@ -989,44 +1000,7 @@
     </div>
   </dialog>
 
-  <dialog id="accountSwitchDialog">
-    <div class="dialog-body">
-  
-      <h3>Change Google Account</h3>
-  
-      <p>
-        Google Apps Script does not reliably support switching between
-        multiple signed-in Google accounts inside the same browser session.
-      </p>
-  
-      <p class="muted">
-        To use a different account, open Google's account chooser. You may
-        need to reopen the ACAT app afterward, or use a private/incognito
-        window with only the desired account signed in.
-      </p>
-  
-      <div class="dialog-actions">
-  
-        <button
-          class="action"
-          onclick="document.getElementById('accountSwitchDialog').close()"
-        >
-          Cancel
-        </button>
-  
-        <button
-          class="action primary"
-          onclick="switchGoogleAccount()"
-        >
-          Open Account Chooser
-        </button>
-  
-      </div>
-  
-    </div>
-  </dialog>
-
-  <dialog id="nameViewDialog" class="name-dialog">
+<dialog id="nameViewDialog" class="name-dialog">
     <div class="name-dialog-header">
       <div>
         <h3 id="nameViewTitle">Member Usernames</h3>
@@ -1200,13 +1174,13 @@
     </div>
   </dialog>
 
-  <?!= include('Utils'); ?>
-  <?!= include('Dashboard'); ?>
-  <?!= include('Members'); ?>
-  <?!= include('Training'); ?>
-  <?!= include('PMC'); ?>
-  <?!= include('Admin'); ?>
-  <?!= include('App'); ?>
+  <?!= include_('Utils'); ?>
+  <?!= include_('Dashboard'); ?>
+  <?!= include_('Members'); ?>
+  <?!= include_('Training'); ?>
+  <?!= include_('PMC'); ?>
+  <?!= include_('Admin'); ?>
+  <?!= include_('App'); ?>
 
 </body>
 </html>

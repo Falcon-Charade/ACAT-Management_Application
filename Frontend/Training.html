@@ -26,7 +26,7 @@
 
   Dependencies:
   - Shared application state from App.html.
-  - Google Apps Script `google.script.run` client API.
+  - Google Apps Script `acatRun()` client API.
   - Google Charts `corechart` package.
   - Server-side training record, expiry, graph, and dashboard functions.
   - Shared member-selection, escaping, notification, and dashboard utilities.
@@ -55,7 +55,7 @@
   
     loadingDialog.showModal();
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(records => {
   
         loadingDialog.close();
@@ -184,7 +184,7 @@
                 <button
                   class="action"
                   onclick="archiveTraining(
-                    '${escapeAttr(record.area)}',
+                    ${escapeJsArgument(record.area)},
                     ${record.row},
                     this
                   )"
@@ -233,7 +233,7 @@
     button.innerHTML =
       '<span class="button-spinner"></span>Archiving...';
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(() => {
   
         showSuccess(
@@ -375,7 +375,7 @@
     saveButton.innerHTML =
       '<span class="button-spinner"></span>Saving...';
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(() => {
   
         saveButton.disabled = false;
@@ -463,7 +463,7 @@
   
     expiryField.value = '';
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(expiryDate => {
         expiryField.value = expiryDate || '';
       })
@@ -631,7 +631,7 @@
     ).innerHTML =
       '<div class="muted">Loading chart...</div>';
   
-    google.script.run
+    acatRun()
       .withSuccessHandler(data => {
         console.log(
           'getTrainingGraphData returned:',

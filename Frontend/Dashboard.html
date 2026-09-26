@@ -24,7 +24,7 @@
 
   Dependencies:
   - Shared application state defined in App.html.
-  - Google Apps Script `google.script.run` client API.
+  - Google Apps Script `acatRun()` client API.
   - The server-side `updateRoleNamesConfig()` function.
   - Shared `escapeHtml()` and `showError()` utilities.
   - Dashboard counters and name-view dialog elements defined in Index.html.
@@ -51,8 +51,8 @@
     document.getElementById('newMemberCount').textContent = newMemberCount;
     document.getElementById('applicantCount').textContent = applicantCount;
     document.getElementById('pmcCount').textContent = state.pmcRecords?.length ?? 0;
-    document.getElementById('missionCreatorCount').textContent = state.missionCreators?.length ?? 0;
-    document.getElementById('trainerCount').textContent = state.trainers?.length ?? 0;
+    document.getElementById('missionCreatorCount').textContent = state.missionCreatorCount ?? state.missionCreators?.length ?? 0;
+    document.getElementById('trainerCount').textContent = state.trainerCount ?? state.trainers?.length ?? 0;
 
     const roles = [];
     if (state.permissions.isAdmin) roles.push('Administrator');
@@ -60,8 +60,6 @@
     if (state.permissions.isTrainer && !state.permissions.isAdmin) roles.push('Trainer');
     if (state.permissions.isMissionCreator && !state.permissions.isAdmin) roles.push('Mission Creator');
     if (!roles.length) roles.push('Read only');
-
-    document.getElementById('permissionSummary').textContent = roles.join(', ');
   }
 
   function openNameViewDialog(role) {
@@ -84,14 +82,24 @@
       Admins: state.admins,
       Recruiters: state.recruiters,
       Trainers: state.trainers,
-      MissionCreators: state.missionCreators
+      MissionCreators: state.missionCreators,
+      Members: state.members?.map(member => member['Username']) || [],
+      NewMembers: state.members?.filter(member =>
+        String(member['Role'] || '').trim().toLowerCase() === 'new member'
+      ).map(member => member['Username']) || [],
+      Applicants: state.members?.filter(member =>
+        String(member['Role'] || '').trim().toLowerCase() === 'applicant'
+      ).map(member => member['Username']) || []
     }
 
     const titles = {
       Admins: 'Administrators',
       Recruiters: 'Recruiters',
       Trainers: 'Trainers',
-      MissionCreators: 'Mission Creators'
+      MissionCreators: 'Mission Creators',
+      Members: 'Members',
+      NewMembers: 'New Members',
+      Applicants: 'Applicants'
     }
     
     const names = (lists[role] || [])
@@ -126,7 +134,7 @@
   }
   
   function refreshRoleNames() {
-    google.script.run
+    acatRun()
       .withSuccessHandler(config => {
   
         state.admins =
@@ -148,7 +156,7 @@
   }
 
   function refreshDashboardCounts() {
-    google.script.run
+    acatRun()
       .withSuccessHandler(data => {
 
         state.trainerCount =

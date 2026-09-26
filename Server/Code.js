@@ -26,8 +26,7 @@
  * - Administrators cannot remove their own administrator access.
  * - Training graph data excludes archived history and avoids duplicate
  *   member-and-area counts on the same date.
- * - `XFrameOptionsMode.ALLOWALL` permits the application to be embedded by
- *   external sites and should remain an intentional security decision.
+ * - Default frame protection is retained; arbitrary embedding is not enabled.
  *
  * Dependencies:
  * - Configuration from Config.js.
@@ -42,25 +41,23 @@ function doGet() {
   return HtmlService
     .createTemplateFromFile('Index')
     .evaluate()
-    .setTitle(CONFIG.APP_NAME)
-    .setXFrameOptionsMode(
-      HtmlService.XFrameOptionsMode.ALLOWALL
-    );
+    .setTitle(CONFIG.APP_NAME);
 }
 
-function getBootstrapData() {
+function getBootstrapData_() {
   return {
     appName: CONFIG.APP_NAME,
-    user: getCurrentUser(),
-    permissions: getPermissions(),
-    members: getMembers(),
-    pmcRecords: getPMCRecords(),
+    user: getCurrentUser_(),
+    permissions: getPermissions_(),
+    members: getMembers_(),
+    pmcRecords: getPMCRecords_(),
     trainingSheets: CONFIG.TRAINING_SHEETS,
-    trainerCount: getActiveTrainerCount(),
-    missionCreators: getNamesByRole('Mission Creator'),//CONFIG.MISSIONCREATORSNAMES,
-    recruiters: getNamesByRole('Recruiter'),//CONFIG.RECRUITERNAMES,
-    trainers: getNamesByRole('Trainer'),
-    admins: getNamesByRole('Administrator'),
+    trainerCount: getActiveTrainerCount_(),
+    missionCreatorCount: getNamesByRole_('Mission Creator').length,
+    missionCreators: getNamesByRole_('Mission Creator'),//CONFIG.MISSIONCREATORSNAMES,
+    recruiters: getNamesByRole_('Recruiter'),//CONFIG.RECRUITERNAMES,
+    trainers: getNamesByRole_('Trainer'),
+    admins: getNamesByRole_('Administrator'),
 
     webAppUrl:
       ScriptApp
@@ -69,23 +66,10 @@ function getBootstrapData() {
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Spreadsheet helpers                                                        */
-/* -------------------------------------------------------------------------- */
-
-
-
-/* -------------------------------------------------------------------------- */
-/* Members                                                                    */
-/* -------------------------------------------------------------------------- */
-
-/* -------------------------------------------------------------------------- */
-/* Training                                                                   */
-/* -------------------------------------------------------------------------- */
-
-
-
-
+function getAdminTrainingConfig_() {
+  requireAdmin_();
+  return getTrainingConfig_();
+}
 
 function getTrainingConfig_() {
   const ss = getTrainingSpreadsheet_();
@@ -106,7 +90,6 @@ function getTrainingConfig_() {
   // Skip header row
   return values
     .slice(1)
-    .filter(row => String(row[0] || '').trim() !== '')
     .map(row => ({
       role: String(row[0]).trim(),
       expiryMonths: Number(row[1]),
@@ -191,7 +174,7 @@ function calculateTrainingStatus_(
   return 'Current';
 }
 
-function updateTrainingConfig(
+function updateTrainingConfig_(
   role,
   expiryMonths,
   reviewDays
@@ -275,7 +258,7 @@ function updateTrainingConfig(
   );
 }
 
-function getArchivedTrainingRecords() {
+function getArchivedTrainingRecords_() {
   requireAdmin_();
 
   const ss =
@@ -358,7 +341,7 @@ function getArchivedTrainingRecords() {
   return results;
 }
 
-function deleteArchivedTrainingRecord(
+function deleteArchivedTrainingRecord_(
   trainingArea,
   rowNumber
 ) {
@@ -437,14 +420,14 @@ function deleteArchivedTrainingRecord(
     rowNumber
   );
 
-  return getArchivedTrainingRecords();
+  return getArchivedTrainingRecords_();
 }
 
 /* -------------------------------------------------------------------------- */
 /* PMC Tracking                                                               */
 /* -------------------------------------------------------------------------- */
 
-function addPMCRecordIgnoringArchived(memberName) {
+function addPMCRecordIgnoringArchived_(memberName) {
   requireAdmin_();
 
   memberName =
@@ -457,7 +440,7 @@ function addPMCRecordIgnoringArchived(memberName) {
   }
 
   const member =
-    getMembers().find(item =>
+    getMembers_().find(item =>
       String(
         item['Member Name'] || ''
       )
@@ -633,21 +616,13 @@ function addPMCRecordIgnoringArchived(memberName) {
 
   sheet.appendRow(row);
 
-  return getPMCRecords();
+  return getPMCRecords_();
 }
 
 /* -------------------------------------------------------------------------- */
 /* Administration                                                             */
 /* -------------------------------------------------------------------------- */
-
-
-function getTrainingConfig() {
-  requireAdmin_();
-
-  return getTrainingConfig_();
-}
-
-function getTrainingExpiryPreview(trainingArea, lastDateString) {
+function getTrainingExpiryPreview_(trainingArea, lastDateString) {
   requireTrainer_();
 
   trainingArea = String(trainingArea || '').trim();
@@ -671,7 +646,7 @@ function getTrainingExpiryPreview(trainingArea, lastDateString) {
   );
 }
 
-function getRoleRecords() {
+function getRoleRecords_() {
   requireAdmin_();
 
   const sheet = getSheetOrThrow_(
@@ -690,7 +665,7 @@ function getRoleRecords() {
   }));
 }
 
-function saveRoleRecords(records) {
+function saveRoleRecords_(records) {
   requireAdmin_();
 
   if (!Array.isArray(records)) {
@@ -746,20 +721,20 @@ function saveRoleRecords(records) {
     };
   });
 
-  const emails = normalizedRecords.map(record => record.email);
+  const emails = normalizedRecords.flatMap(record => parseEmailList_(record.email));
 
   const currentUserEmail = String(
-    Session.getActiveUser().getEmail() || ''
+    getCurrentUser_().email || ''
   )
     .trim()
     .toLowerCase();
   
   const currentUserRecord = normalizedRecords.find(
-    record => record.email === currentUserEmail
+    record => parseEmailList_(record.email).includes(currentUserEmail)
   );
   
   if (
-    currentUserRecord &&
+    !currentUserRecord ||
     !currentUserRecord.administrator
   ) {
     throw new Error(
@@ -806,7 +781,7 @@ function saveRoleRecords(records) {
     lock.releaseLock();
   }
 
-  return getRoleRecords();
+  return getRoleRecords_();
 }
 
 function isTrue_(value) {
@@ -822,7 +797,7 @@ function isTrue_(value) {
 
 
 
-function getTrainingGraphData(
+function getTrainingGraphData_(
   area,
   startDateString,
   endDateString
@@ -1027,9 +1002,10 @@ function isUserInAnyGroup_(email, groups) {
   return false;
 }
 
-function testGroupMembership() {
+function testGroupMembership_() {
+  requireAdmin_();
   const email =
-    Session.getActiveUser().getEmail();
+    getCurrentUser_().email;
 
   const group =
     'YOUR-ADMIN-GROUP@googlegroups.com';
@@ -1068,7 +1044,8 @@ function testGroupMembership() {
   }
 }
 
-function updateRoleNamesConfig() {
+function updateRoleNamesConfig_() {
+  requireAdmin_();
   const roles = [
     'Administrator',
     'Mission Creator',
@@ -1079,7 +1056,7 @@ function updateRoleNamesConfig() {
   const config = {};
 
   roles.forEach(role => {
-    config[role] = getNamesByRole(role);
+    config[role] = getNamesByRole_(role);
   });
 
   PropertiesService.getScriptProperties().setProperty(
@@ -1090,7 +1067,7 @@ function updateRoleNamesConfig() {
   return config;
 }
 
-function include(filename) {
+function include_(filename) {
   return HtmlService
     .createHtmlOutputFromFile(filename)
     .getContent();
