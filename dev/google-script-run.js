@@ -1194,6 +1194,45 @@
     }
   };
 
+  // Local fixtures only. No Google credentials are accepted by the mock.
+  let mockRole = new URLSearchParams(window.location.search).get('mockRole') || 'anonymous';
+  const mockPermissions = () => {
+    const isAdmin = mockRole === 'admin';
+    return {isAdmin, isTrainer: isAdmin || mockRole === 'trainer',
+      isRecruiter: isAdmin || mockRole === 'recruiter',
+      isMissionCreator: isAdmin || mockRole === 'missionCreator', canView: true};
+  };
+  handlers.getAuthConfig = () => ({clientId: '', nonce: ''});
+  handlers.logoutSession = () => { mockRole = 'anonymous'; return true; };
+  handlers.authenticateGoogleUser = () => { throw new Error('Real sign-in is unavailable in the local mock.'); };
+  handlers.api = function(operation, args) {
+    const publicReads = ['getBootstrapData', 'getMembers', 'getPMCRecords', 'getTrainingForMember',
+      'getTrainingByArea', 'getDashboardCounts', 'getActiveTrainerCount', 'getTrainingGraphData'];
+    const p = mockPermissions();
+    const special = {updateMember: p.isRecruiter, deleteMember: p.isRecruiter,
+      upsertTrainingRecord: p.isTrainer, getTrainingExpiryPreview: p.isTrainer,
+      addPMCRecord: p.isMissionCreator, updatePMCRecord: p.isMissionCreator};
+    if (!publicReads.includes(operation) && !p.isAdmin && !special[operation]) throw new Error('ACCESS_DENIED: Mock permission required.');
+    if (operation === 'api' || !Object.prototype.hasOwnProperty.call(handlers, operation)) throw new Error('Unknown mock operation');
+    let result = handlers[operation].apply(handlers, args);
+    const pick = (row, keys) => Object.fromEntries(keys.filter(key => key in row).map(key => [key, row[key]]));
+    const members = rows => rows.filter(row => String(row.Role).toLowerCase() !== 'banned')
+      .map(row => Object.fromEntries(Object.entries(row).filter(([key]) =>
+        key !== '_row' && key.trim().toLowerCase() !== 'notes / observations')));
+    const pmcs = rows => rows.map(row => pick(row, ['Member Name', 'Phase', 'Scripts Allowed', 'Assets Allowed', 'Consecutive Good Missions']));
+    if (operation === 'getBootstrapData') {
+      result.permissions = p;
+      result.user = {authenticated: mockRole !== 'anonymous', email: mockRole === 'anonymous' ? null : useremail,
+        roles: mockRole === 'anonymous' || mockRole === 'reader' ? [] : [mockRole]};
+      if (!p.isRecruiter) result.members = members(result.members);
+      if (!p.isMissionCreator) result.pmcRecords = pmcs(result.pmcRecords);
+    }
+    if (operation === 'getMembers' && !p.isRecruiter) result = members(result);
+    if (operation === 'getPMCRecords' && !p.isMissionCreator) result = pmcs(result);
+    if (operation === 'getTrainingForMember') result = result.map(row => pick(row, ['sheet', 'row', 'status', 'lastCompetenciesDate', 'competenciesExpiry']));
+    return result;
+  };
+
   function cloneResult(value) {
     if (value === undefined || value === null) return value;
     try {

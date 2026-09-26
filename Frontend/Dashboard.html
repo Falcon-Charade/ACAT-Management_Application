@@ -1,0 +1,172 @@
+<!--
+  @file Dashboard.html
+  @description Provides client-side dashboard metrics, permission summaries,
+  and role-member displays for the ACAT Management Application.
+
+  Responsibilities:
+  - Calculates member, new-member, and applicant totals from shared member data.
+  - Displays PMC, mission creator, and trainer totals.
+  - Summarizes the signed-in user's assigned permissions.
+  - Displays alphabetically sorted names for selected application roles.
+  - Refreshes role-name lists from the server and updates the dashboard.
+  - Escapes member names before inserting them into generated HTML.
+  - Requests refreshed dashboard counts from the server after data changes.
+
+  Important:
+  - Dashboard values are calculated from the shared `state` object.
+  - Member counts depend on exact role names, compared case-insensitively.
+  - Administrators are displayed only as Administrator because they inherit the
+    application's other permissions.
+  - Users without a privileged role are shown as `Read only`.
+  - Role keys and DOM element IDs must remain synchronized with the server
+    response and Index.html.
+  - Refreshed role data replaces the corresponding lists in shared state.
+
+  Dependencies:
+  - Shared application state defined in App.html.
+  - Google Apps Script `acatRun()` client API.
+  - The server-side `updateRoleNamesConfig()` function.
+  - Shared `escapeHtml()` and `showError()` utilities.
+  - Dashboard counters and name-view dialog elements defined in Index.html.
+  - Server-side `updateRoleNamesConfig()` and `getDashboardCounts()` functions.
+-->
+
+<script>
+
+  function updateDashboard() {
+
+    const members = state.members || [];
+
+    const memberCount = members.filter(member =>
+      String(member['Role'] || '').trim().toLowerCase() === 'member'
+    ).length;
+    const newMemberCount = members.filter(member =>
+      String(member['Role'] || '').trim().toLowerCase() === 'new member'
+    ).length;
+    const applicantCount = members.filter(member =>
+      String(member['Role'] || '').trim().toLowerCase() === 'applicant'
+    ).length;
+
+    document.getElementById('memberCount').textContent = memberCount;
+    document.getElementById('newMemberCount').textContent = newMemberCount;
+    document.getElementById('applicantCount').textContent = applicantCount;
+    document.getElementById('pmcCount').textContent = state.pmcRecords?.length ?? 0;
+    document.getElementById('missionCreatorCount').textContent = state.missionCreatorCount ?? state.missionCreators?.length ?? 0;
+    document.getElementById('trainerCount').textContent = state.trainerCount ?? state.trainers?.length ?? 0;
+
+    const roles = [];
+    if (state.permissions.isAdmin) roles.push('Administrator');
+    if (state.permissions.isRecruiter && !state.permissions.isAdmin) roles.push('Recruiter');
+    if (state.permissions.isTrainer && !state.permissions.isAdmin) roles.push('Trainer');
+    if (state.permissions.isMissionCreator && !state.permissions.isAdmin) roles.push('Mission Creator');
+    if (!roles.length) roles.push('Read only');
+  }
+
+  function openNameViewDialog(role) {
+    const dialog =
+      document.getElementById(
+        'nameViewDialog'
+      );
+
+    const container =
+      document.getElementById(
+        'nameViewResults'
+      );
+
+    const title =
+      document.getElementById(
+        'nameViewTitle'
+      );
+    
+    const lists = {
+      Admins: state.admins,
+      Recruiters: state.recruiters,
+      Trainers: state.trainers,
+      MissionCreators: state.missionCreators,
+      Members: state.members?.map(member => member['Username']) || [],
+      NewMembers: state.members?.filter(member =>
+        String(member['Role'] || '').trim().toLowerCase() === 'new member'
+      ).map(member => member['Username']) || [],
+      Applicants: state.members?.filter(member =>
+        String(member['Role'] || '').trim().toLowerCase() === 'applicant'
+      ).map(member => member['Username']) || []
+    }
+
+    const titles = {
+      Admins: 'Administrators',
+      Recruiters: 'Recruiters',
+      Trainers: 'Trainers',
+      MissionCreators: 'Mission Creators',
+      Members: 'Members',
+      NewMembers: 'New Members',
+      Applicants: 'Applicants'
+    }
+    
+    const names = (lists[role] || [])
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+
+    title.textContent = titles[role] || 'Member Usernames';
+
+    container.innerHTML = names.length
+      ? `
+        <ul class="name-list">
+          ${names.map(name => `
+            <li class="name-list-item">
+              <span class="name-avatar">
+                ${escapeHtml(name.charAt(0).toUpperCase())}
+              </span>
+    
+              <span class="name-text">
+                ${escapeHtml(name)}
+              </span>
+            </li>
+          `).join('')}
+        </ul>
+      `
+      : `
+        <div class="name-empty">
+          No members have been assigned to this role.
+        </div>
+      `;
+    
+    dialog.showModal();
+  }
+  
+  function refreshRoleNames() {
+    acatRun()
+      .withSuccessHandler(config => {
+  
+        state.admins =
+          config['Administrator'] || [];
+  
+        state.recruiters =
+          config['Recruiter'] || [];
+  
+        state.trainers =
+          config['Trainer'] || [];
+  
+        state.missionCreators =
+          config['Mission Creator'] || [];
+  
+        updateDashboard();
+      })
+      .withFailureHandler(showError)
+      .updateRoleNamesConfig();
+  }
+
+  function refreshDashboardCounts() {
+    acatRun()
+      .withSuccessHandler(data => {
+
+        state.trainerCount =
+          data.trainerCount ?? 0;
+
+        updateDashboard();
+
+      })
+      .withFailureHandler(showError)
+      .getDashboardCounts();
+  }
+
+</script>

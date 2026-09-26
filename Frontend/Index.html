@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<!--
+  @file Index.html
+  @description Defines the main HTML document, application sections, controls,
+  dialogs, and frontend module composition for the ACAT Management Application.
+
+  Responsibilities:
+  - Defines the application header, navigation, and primary content sections.
+  - Provides dashboard, member, training, PMC, and administration interfaces.
+  - Defines the forms, tables, filters, buttons, and dialogs used by frontend
+    scripts.
+  - Loads Google Charts and the shared application stylesheet.
+  - Includes the frontend JavaScript modules in the required order.
+  - Provides global success and error feedback containers.
+
+  Important:
+  - Element IDs and `data-section` values are referenced throughout the frontend
+    JavaScript and must remain synchronized with those modules.
+  - Permission-sensitive controls are hidden or shown by App.html.
+  - Client-side visibility does not replace server-side authorization.
+  - Included filenames must match the corresponding Google Apps Script HTML
+    files.
+  - Frontend scripts should be included after the DOM elements they access.
+
+  Dependencies:
+  - Google Apps Script HTML template evaluation and `include()` helper.
+  - Styles.html and the frontend JavaScript modules.
+  - Google Charts loader.
+  - Browser support for native HTML dialogs.
+-->
+<html>
+<head>
+  <base target="_top">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+
+  <script
+    src="https://www.gstatic.com/charts/loader.js">
+  </script>
+
+  <?!= include_('Styles'); ?>
+</head>
+
+<body>
+  <header>
+    <div class="app-brand">
+      <img class="app-logo"
+        src="https://raw.githubusercontent.com/Falcon-Charade/ACAT-Management_Application/main/Frontend/Images/acat_logo.png"
+        alt="ACAT Logo"
+      >
+      <h1 id="appName">ACAT Management Application</h1>
+    </div>
+    <div class="user-area">
+      <div
+        class="user"
+        id="userDisplay"
+      ></div>
+      <div id="authStatus">Read-only access</div>
+      <div id="googleSignIn"></div>
+      <button id="signOutButton" class="sign-out-button" onclick="signOutACAT()" hidden>Sign out</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav>
+      <button class="active" data-section="dashboard">Dashboard</button>
+      <button data-section="members">Members</button>
+      <button data-section="training">Training</button>
+      <button data-section="pmc">PMCs</button>
+      <button
+        id="adminNavButton" style="display:none"
+        data-section="administration"
+      >
+        Administration
+      </button>
+    </nav>
+
+    <main>
+      <div id="errorBox" class="error"></div>
+      <div id="successBox" class="success"></div>
+
+      <section id="dashboard" class="section active">
+        <h2 id="dashboardWelcome">Welcome User</h2>
+
+        <h4>Member Usernames</h4>
+        <div class="cards">
+          <div class="card">
+            <div class="chart-control-button">
+              <button
+                class="action primary"
+                onclick="openNameViewDialog('Applicants')"
+              >
+                View Applicants
+              </button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="chart-control-button">
+              <button
+                class="action primary"
+                onclick="openNameViewDialog('NewMembers')"
+              >
+                View New Members
+              </button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="chart-control-button">
+              <button
+                class="action primary"
+                onclick="openNameViewDialog('Members')"
+              >
+                View Members
+              </button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="chart-control-button">
+              <button
+                class="action primary"
+                onclick="openNameViewDialog('MissionCreators')"
+              >
+                View Mission Creators
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <h4>Counts</h4>
+        <div class="cards dashboard-cards">
+
+          <div class="card">
+            <div class="muted">Applicants</div>
+            <div class="metric" id="applicantCount">0</div>
+          </div>
+
+          <div class="card">
+            <div class="muted">New Members</div>
+            <div class="metric" id="newMemberCount">0</div>
+          </div>
+
+          <div class="card">
+            <div class="muted">Members</div>
+            <div class="metric" id="memberCount">0</div>
+          </div>
+
+          <div class="card">
+            <div class="muted">Potential Mission Creators</div>
+            <div class="metric" id="pmcCount">0</div>
+          </div>
+
+          <div class="card">
+            <div class="muted">Mission Creators</div>
+            <div class="metric" id="missionCreatorCount">0</div>
+          </div>
+
+          <div class="card">
+            <div class="muted">Trainers</div>
+            <div class="metric" id="trainerCount">0</div>
+          </div>
+        </div>
+
+        <h4>Training History</h4>
+        <div class="card">
+          <div class="chart-control-button">
+            <button
+              class="action"
+              style="margin-left: auto;"
+              onclick="openTrainingGraphDialog()"
+            >
+              View Training Graph
+            </button>
+          </div>
+        </div>
+
+      </section>
+
+      <section id="members" class="section">
+        <h2>Members</h2>
+
+        <div class="toolbar">
+        
+          <input
+            id="memberSearch"
+            placeholder="Search members"
+          >
+        
+          <select
+            id="memberRoleFilter"
+            onchange="
+              updateMemberSortOptions();
+              renderMembers();
+              "
+          >
+            <option value="All">
+              All Roles
+            </option>
+          </select>
+        
+          <select
+            id="memberRecruiterFilter"
+            onchange="renderMembers()"
+          >
+            <option value="All">
+              All Recruiters
+            </option>
+          </select>
+        
+          <select
+            id="memberSort"
+            onchange="renderMembers()"
+          >
+            <option value="alphabetical">
+              Alphabetical
+            </option>
+        
+            <option value="id">
+              Member ID
+            </option>
+        
+            <option value="nextDate">
+              Next Progression Date
+            </option>
+          </select>
+        
+          <button
+            id="addMemberButton" style="display:none"
+            class="action primary"
+            onclick="openAddMember()"
+          >
+            Add member
+          </button>
+        
+        </div>
+
+        <div id="membersTable"></div>
+      </section>
+
+      <section id="training" class="section">
+        <h2>Training</h2>
+      
+        <div class="toolbar">
+      
+          <select
+            id="trainingAreaFilter"
+            onchange="loadTrainingArea()"
+          >
+            <option value="All">
+              All Training Areas
+            </option>
+          </select>
+      
+          <input
+            id="trainingSearch"
+            type="text"
+            placeholder="Search username"
+            oninput="renderTrainingAreaRecords()"
+          >
+      
+          <button
+            class="action"
+            onclick="loadTrainingArea()"
+          >
+            Refresh Training
+          </button>
+      
+          <button
+            id="editTrainingButton" style="display:none"
+            class="action primary"
+            onclick="openTrainingEditor()"
+          >
+            Edit Training
+          </button>
+
+          <button
+            class="action"
+            style="margin-left: auto;"
+            onclick="openTrainingGraphDialog()"
+          >
+            View Training Graph
+          </button>
+        </div>
+      
+        <div id="trainingResults"></div>
+      </section>
+
+      <section id="pmc" class="section">
+
+        <h2>Potential Mission Creators</h2>
+
+        <div class="toolbar">
+          <button
+            id="addPMCButton" style="display:none"
+            class="action primary"
+            onclick="openAddPMC()"
+          >
+            Add PMC
+          </button>
+        </div>
+
+        <div id="pmcTable"></div>
+
+      </section>
+
+      <section id="administration" class="section">
+        <h2>Administration</h2>
+        <div class="card">
+          <h3>Training Expiry Configuration</h3>
+
+          <p class="muted">
+            Configure how long each competency remains current and how
+            many days before expiry it enters Needs Review.
+          </p>
+
+          <button
+            class="action primary"
+            onclick="loadTrainingConfig()"
+          >
+            Manage Training Expiry
+          </button>
+        </div>
+
+        <div class="card" style="margin-top: 20px;">
+          <h3>Archived Training Records</h3>
+        
+          <p class="muted">
+            View and restore training records that have been archived.
+          </p>
+        
+          <button
+            class="action primary"
+            onclick="openArchivedTrainingDialog()"
+          >
+            Manage Archived Records
+          </button>
+        </div>
+
+        <div class="card" style="margin-top: 20px;">
+          <h3>Training History</h3>
+
+          <p class="muted">
+            Search, archive, restore, or delete historical training records.
+          </p>
+
+          <button
+            class="action primary"
+            onclick="openTrainingHistoryDialog()"
+          >
+            Manage Training History
+          </button>
+        </div>
+
+        <div
+          id="roleManagementCard"
+          class="card"
+          style="margin-top:20px;"
+        >
+          <h3>User Roles</h3>
+        
+          <p class="muted">
+            Manage user emails and application permissions.
+          </p>
+        
+          <button
+            class="action primary"
+            onclick="openRoleManagementDialog()"
+          >
+            Manage User Roles
+          </button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="memberDialog">
+    <div class="dialog-body">
+      <h3>Add Member</h3>
+
+      <div class="form-row">
+        <label>Member Name</label>
+        <input id="newMemberName">
+      </div>
+
+      <div class="form-row">
+        <label>Recruiter</label>
+        <select id="newMemberRecruiter"></select>
+      </div>
+
+      <div class="form-row">
+        <label>Discord Join Date</label>
+        <input
+          id="newMemberDiscordJoinDate"
+          type="date"
+        >
+      </div>
+
+      <div class="dialog-actions">
+        <button class="action" onclick="document.getElementById('memberDialog').close();">Cancel</button>
+        <button class="action primary" onclick="saveNewMember()">Save</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="memberViewDialog">
+    <div class="dialog-body">
+  
+      <h3 id="memberViewTitle">
+        Member Details
+      </h3>
+  
+      <div id="memberViewContents"></div>
+  
+      <div
+        class="dialog-actions"
+        style="
+          justify-content:space-between;
+          align-items:center;
+        "
+      >
+      
+        <button
+          class="action"
+          onclick="viewAllMemberDetails()"
+        >
+          View All Details
+        </button>
+      
+        <div
+          style="
+            display:flex;
+            gap:8px;
+          "
+        >
+      
+          <button
+            class="action"
+            onclick="document.getElementById('memberViewDialog').close()"
+          >
+            Close
+          </button>
+      
+          <button
+            id="memberViewDeleteButton"
+            class="action danger"
+            onclick="deleteViewedMember()"
+          >
+            Delete
+          </button>
+      
+          <button
+            id="memberViewEditButton"
+            class="action primary"
+            onclick="editViewedMember()"
+          >
+            Edit
+          </button>
+      
+        </div>
+      
+      </div>
+  
+    </div>
+  </dialog>
+
+  <dialog id="memberAllDetailsDialog" class="wide-dialog">
+    <div class="dialog-body">
+  
+      <h3 id="memberAllDetailsTitle">
+        Member Details
+      </h3>
+  
+      <div id="memberAllDetailsContents"></div>
+  
+      <div class="dialog-actions">
+  
+        <button
+          class="action"
+          onclick="
+            document
+              .getElementById(
+                'memberAllDetailsDialog'
+              )
+              .close()
+          "
+        >
+          Close
+        </button>
+  
+      </div>
+  
+    </div>
+  </dialog>
+
+  <dialog id="memberEditDialog">
+    <div class="dialog-body">
+  
+      <h3>Edit Member</h3>
+  
+      <div id="memberEditFields"></div>
+  
+      <div
+        class="dialog-actions"
+        style="
+          justify-content:space-between;
+          align-items:center;
+        "
+      >
+      
+        <button
+          class="action"
+          onclick="openMemberExtraFields()"
+        >
+          Update Extra Fields
+        </button>
+      
+        <div
+          style="
+            display:flex;
+            gap:8px;
+          "
+        >
+      
+          <button
+            class="action"
+            onclick="document.getElementById('memberEditDialog').close()"
+          >
+            Cancel
+          </button>
+      
+          <button
+            class="action primary"
+            onclick="saveMemberEdit()"
+          >
+            Save
+          </button>
+      
+        </div>
+      
+      </div>
+  
+    </div>
+  </dialog>
+
+  <dialog id="memberExtraFieldsDialog">
+  
+    <div class="dialog-body">
+  
+      <h3>
+        Update Extra Member Fields
+      </h3>
+  
+      <div id="memberExtraFields"></div>
+  
+      <div class="dialog-actions">
+  
+        <button
+          class="action"
+          onclick="
+            document
+              .getElementById(
+                'memberExtraFieldsDialog'
+              )
+              .close()
+          "
+        >
+          Cancel
+        </button>
+  
+        <button
+          class="action primary"
+          onclick="saveMemberExtraFields()"
+        >
+          Save
+        </button>
+  
+      </div>
+  
+    </div>
+  
+  </dialog>
+
+  <dialog
+    id="appLoadingDialog"
+    class="app-loading-dialog"
+  >
+    <div class="dialog-body loading-dialog-body">
+      <div class="spinner"></div>
+  
+      <h3>Loading ACAT Management</h3>
+  
+      <div class="muted">
+        Please be patient. Retrieving application data...
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="trainingLoadingDialog">
+    <div class="dialog-body loading-dialog-body">
+      <div class="spinner"></div>
+      <h3>Loading Training</h3>
+      <div class="muted">
+        Retrieving training records...
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="pmcDialog">
+    <div class="dialog-body">
+      <h3>Edit PMC</h3>
+      <input type="hidden" id="pmcRow">
+      <div class="form-row">
+        <label>ID</label>
+        <input id="pmcId" disabled>
+      </div>
+      <div class="form-row">
+        <label>Member Name</label>
+        <input id="pmcMemberName" disabled>
+      </div>
+      <div class="form-row">
+        <label for="pmc-Phase">Phase</label>
+        <select name="pmc-Phase" id="pmcPhase" onchange="updatePMCPhaseFields()">
+          <option value="Phase 1">Phase 1</option>
+          <option value="Phase 2">Phase 2</option>
+          <option value="Phase 3">Phase 3</option>
+        </select>
+      </div>
+      <div class="form-row radio-row">
+        <label>Scripts Allowed</label>
+        <input
+          id="pmcScriptsAllowed"
+          type="text"
+          readonly
+        >
+      </div>
+      <div class="form-row radio-row">
+        <label>Assets Allowed</label>
+        <input
+          id="pmcAssetsAllowed"
+          type="text"
+          readonly
+        >
+      </div>
+      <div class="form-row">
+        <label>Consecutive Good Missions</label>
+        <input
+          id="pmcGoodMissions"
+          type="number"
+          min="0"
+        >
+      </div>
+      <div class="dialog-actions">
+        <button
+          class="action"
+          onclick="pmcDialog.close()"
+        >
+          Cancel
+        </button>
+        <button
+          id="pmcEditSaveButton"
+          class="action primary"
+          onclick="savePMC(this)"
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="pmcAddDialog">
+    <div class="dialog-body">
+      <h3>Add Potential Mission Creator</h3>
+
+      <div class="form-row">
+        <label for="missionAddMember">Member</label>
+        <input
+            id="missionAddMember"
+            type="text"
+            placeholder="Search members"
+            autocomplete="off"
+          >
+      </div>
+
+      <div class="dialog-actions">
+        <button class="action" onclick="pmcAddDialog.close()">Cancel</button>
+        <button id="pmcAddSaveButton" class="action primary" onclick="saveNewPMC()">Save</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="pmcArchivedChoiceDialog" class="wide-dialog">
+    <div class="dialog-body">
+  
+      <h3>Archived PMC Records Found</h3>
+  
+      <p id="pmcArchivedChoiceMessage"></p>
+  
+      <div
+        id="pmcArchivedChoiceResults"
+        style="overflow-x:auto;"
+      ></div>
+  
+      <div class="dialog-actions">
+  
+        <button
+          class="action"
+          onclick="document.getElementById('pmcArchivedChoiceDialog').close()"
+        >
+          Close
+        </button>
+  
+        <button
+          id="pmcCreateNewButton"
+          class="action primary"
+          onclick="createNewPMCAfterArchive()"
+        >
+          Create New Record
+        </button>
+  
+      </div>
+  
+    </div>
+  </dialog>
+
+  <dialog id="trainingEditDialog">
+    <div class="dialog-body">
+  
+      <h3>Edit Training</h3>
+  
+      <div class="form-row">
+        <label for="trainingEditMember">Member</label>
+        <input 
+          id="trainingEditMember"
+          type="text"
+          placeholder="Search members"
+          autocomplete="off"
+        >
+      </div>
+  
+      <div class="form-row">
+        <label>Training Area</label>
+        <select id="trainingEditArea" onchange="updateTrainingExpiryPreview()"></select>
+      </div>
+  
+      <div class="form-row" id="trainingTypeRow">
+        <label>Training Type</label>
+  
+        <select
+          id="trainingEditStatus"
+          onchange="updateTrainingDateVisibility()"
+        >
+          <option value="Competency">Competency</option>
+          <option value="Trainer">Trainer</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <label>Training Completion Date</label>
+
+        <input
+          type="date"
+          id="trainingEditLastDate"
+          onchange="updateTrainingExpiryPreview()"
+        >
+      </div>
+
+      <div
+        class="form-row"
+        id="trainingExpiryField"
+      >
+        <label>Competencies Expiry</label>
+
+        <input
+          type="date"
+          id="trainingEditExpiry"
+          readonly
+        >
+      </div>
+  
+      <div class="dialog-actions">
+        <button
+          class="action"
+          onclick="document.getElementById('trainingEditDialog').close()"
+        >
+          Cancel
+        </button>
+  
+        <button
+          id="trainingSaveButton"
+          class="action primary"
+          onclick="saveTrainingRecord()"
+        >
+          Save
+        </button>
+      </div>
+  
+    </div>
+  </dialog>
+
+  <dialog id="trainingConfigListDialog" class="wide-dialog">
+    <div class="dialog-body">
+  
+      <h3>Training Expiry Configuration</h3>
+  
+      <div id="trainingConfigList"></div>
+
+      <div
+        id="trainingConfigTable"
+        style="margin-top: 16px;"
+      ></div>
+  
+      <div class="dialog-actions">
+        <button
+          class="action"
+          onclick="document.getElementById('trainingConfigListDialog').close()"
+        >
+          Close
+        </button>
+      </div>
+  
+    </div>
+  </dialog>
+
+  <dialog id="trainingConfigEditDialog">
+    <div class="dialog-body">
+  
+      <h3 id="dialogTitle-RoleExpiry">
+        Edit Training Expiry
+      </h3>
+  
+      <input
+        type="hidden"
+        id="configRole"
+      >
+  
+      <div class="form-row">
+        <label>Training Area</label>
+  
+        <input
+          id="configRoleDisplay"
+          disabled
+        >
+      </div>
+  
+      <div class="form-row">
+        <label>Expiry Limit (Months)</label>
+  
+        <input
+          type="number"
+          id="configExpiryMonths"
+          min="0"
+          step="1"
+        >
+      </div>
+  
+      <div class="form-row">
+        <label>Review Period (Days)</label>
+  
+        <input
+          type="number"
+          id="configReviewDays"
+          min="0"
+          step="1"
+        >
+      </div>
+  
+      <div class="dialog-actions">
+        <button
+          class="action"
+          onclick="document.getElementById('trainingConfigEditDialog').close()"
+        >
+          Cancel
+        </button>
+  
+        <button
+          class="action primary"
+          onclick="saveTrainingConfig()"
+        >
+          Save
+        </button>
+      </div>
+  
+    </div>
+  </dialog>
+
+  <dialog id="archivedTrainingDialog" class="wide-dialog">
+    <div class="dialog-body">
+  
+      <h3>Archived Training Records</h3>
+  
+      <div class="toolbar">
+        <input
+          id="archivedTrainingSearch"
+          type="text"
+          placeholder="Search username"
+          oninput="renderArchivedTrainingRecords()"
+        >
+  
+        <select
+          id="archivedTrainingArea"
+          onchange="renderArchivedTrainingRecords()"
+        >
+          <option value="All">
+            All Training Areas
+          </option>
+        </select>
+      </div>
+  
+      <div id="archivedTrainingResults">
+        <div class="muted">
+          Loading archived records...
+        </div>
+      </div>
+  
+      <div class="dialog-actions">
+        <button
+          class="action"
+          onclick="document.getElementById('archivedTrainingDialog').close()"
+        >
+          Close
+        </button>
+      </div>
+  
+    </div>
+  </dialog>
+
+  <dialog id="trainingHistoryDialog" class="wide-dialog">
+    <div class="dialog-body">
+  
+      <h3>Manage Training History</h3>
+  
+      <div class="toolbar">
+  
+        <div>
+          <label>From</label>
+          <input
+            id="trainingHistoryFrom"
+            type="date"
+          >
+        </div>
+  
+        <div>
+          <label>To</label>
+          <input
+            id="trainingHistoryTo"
+            type="date"
+          >
+        </div>
+  
+        <div>
+          <label>Member Name</label>
+          <input
+            id="trainingHistoryMember"
+            type="text"
+            placeholder="Optional"
+          >
+        </div>
+  
+        <div>
+          <label>Training Area</label>
+          <select id="trainingHistoryArea">
+            <option value="All">
+              All Training Areas
+            </option>
+          </select>
+        </div>
+  
+        <div style="display:flex; align-items:flex-end;">
+          <button
+            id="trainingHistorySearchButton"
+            class="action primary"
+            onclick="searchTrainingHistory()"
+          >
+            Search
+          </button>
+        </div>
+  
+      </div>
+  
+      <div id="trainingHistoryResults">
+        <div class="muted">
+          Select a date range and click Search.
+        </div>
+      </div>
+  
+      <div class="dialog-actions">
+        <button
+          class="action"
+          onclick="document.getElementById('trainingHistoryDialog').close()"
+        >
+          Close
+        </button>
+      </div>
+  
+    </div>
+  </dialog>
+
+<dialog id="nameViewDialog" class="name-dialog">
+    <div class="name-dialog-header">
+      <div>
+        <h3 id="nameViewTitle">Member Usernames</h3>
+      </div>
+  
+      <button
+        class="dialog-close"
+        type="button"
+        aria-label="Close"
+        onclick="document.getElementById('nameViewDialog').close()"
+      >
+        &times;
+      </button>
+    </div>
+  
+    <div id="nameViewResults" class="name-view-results"></div>
+  
+    <div class="name-dialog-footer">
+      <button
+        class="action primary"
+        type="button"
+        onclick="document.getElementById('nameViewDialog').close()"
+      >
+        Done
+      </button>
+    </div>
+  </dialog>
+
+  <dialog id="trainingGraphDialog" class="wide-dialog">
+    <div class="dialog-body">
+      <div class="chart-header">
+        <div>
+          <h3>Training Competencies</h3>
+          <div class="muted">
+            Valid competencies over time
+          </div>
+        </div>
+      </div>
+      
+      <div class="chart-controls">
+    
+        <div>
+          <label>Training Area</label>
+    
+          <select id="chartTrainingArea">
+            <option value="All">
+              All Training Areas
+            </option>
+          </select>
+        </div>
+    
+        <div>
+          <label>Range</label>
+    
+          <select
+            id="chartRangeType"
+            onchange="updateChartRangeControls()"
+          >
+            <option value="months">
+              Last X Months
+            </option>
+    
+            <option value="days">
+              Last X Days
+            </option>
+    
+            <option value="custom">
+              Custom Range
+            </option>
+          </select>
+        </div>
+    
+        <div id="chartRelativeRange">
+          <label>Amount</label>
+    
+          <input
+            type="number"
+            id="chartRangeAmount"
+            value="6"
+            min="1"
+          >
+        </div>
+    
+        <div
+          id="chartCustomStart"
+          style="display:none"
+        >
+          <label>From</label>
+    
+          <input
+            type="date"
+            id="chartStartDate"
+          >
+        </div>
+    
+        <div
+          id="chartCustomEnd"
+          style="display:none"
+        >
+          <label>To</label>
+    
+          <input
+            type="date"
+            id="chartEndDate"
+          >
+        </div>
+    
+        <div class="chart-control-button">
+          <button
+            class="action primary"
+            onclick="loadTrainingChart()"
+          >
+            Update
+          </button>
+        </div>
+    
+      </div>
+      
+      <div
+        id="trainingChart"
+        style="height:400px;"
+      ></div>
+  
+      <div class="dialog-actions">
+        <button
+          class="action"
+          onclick="document.getElementById('trainingGraphDialog').close()"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </dialog>
+  
+  <dialog id="roleManagementDialog" class="wide-dialog">
+    <div class="dialog-body">
+      <h3>Manage User Roles</h3>
+  
+      <p class="muted">
+        Update user emails and role permissions.
+      </p>
+  
+      <div
+        id="roleManagementResults"
+        style="overflow-x:auto;"
+      ></div>
+  
+      <div class="dialog-actions">
+        <button
+          class="action"
+          onclick="addRoleEditorRow()"
+        >
+          Add User
+        </button>
+  
+        <button
+          class="action"
+          onclick="document.getElementById('roleManagementDialog').close()"
+        >
+          Cancel
+        </button>
+  
+        <button
+          id="saveRoleRecordsButton"
+          class="action primary"
+          onclick="saveRoleRecords()"
+        >
+          Save Changes
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <?!= include_('Utils'); ?>
+  <?!= include_('Dashboard'); ?>
+  <?!= include_('Members'); ?>
+  <?!= include_('Training'); ?>
+  <?!= include_('PMC'); ?>
+  <?!= include_('Admin'); ?>
+  <?!= include_('App'); ?>
+
+</body>
+</html>

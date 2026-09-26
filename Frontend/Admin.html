@@ -1,0 +1,1024 @@
+<!--
+  @file Admin.html
+  @description Provides administrator-only configuration, archived training,
+  training-history, and user-role management workflows for the ACAT Management
+  Application.
+
+  Responsibilities:
+  - Loads, displays, validates, and updates training expiry configuration.
+  - Retrieves and filters archived training records.
+  - Restores or permanently deletes archived training records.
+  - Searches training history by date range, member name, and training area.
+  - Archives, restores, and permanently deletes training-history records.
+  - Loads and renders editable user-role assignments.
+  - Adds role-editor rows and saves role changes to the server.
+  - Refreshes training views, charts, dashboard counts, and role-name lists
+    after relevant administrative changes.
+
+  Important:
+  - All workflows in this file are intended for administrators.
+  - Client-side permission checks control visibility and interaction only;
+    server-side authorization remains required.
+  - Expiry limits and review periods must be non-negative whole numbers.
+  - Permanent deletion operations cannot be undone and require confirmation.
+  - Training-history searches require valid From and To dates.
+  - Values inserted into generated HTML must use `escapeHtml()` or
+    `escapeAttr()` as appropriate.
+  - Role fields, state properties, and DOM element IDs must remain synchronized
+    with the server data and Index.html.
+
+  Dependencies:
+  - Shared application state from App.html.
+  - Google Apps Script `acatRun()` client API.
+  - Server-side training configuration, archive, history, and role-management
+    functions.
+  - Training refresh and chart functions from Training.html.
+  - Dashboard and role-name refresh functions from Dashboard.html.
+  - Shared escaping and notification utilities.
+  - Administration tables, forms, buttons, and dialogs defined in Index.html.
+-->
+
+<script>
+  
+  let editableRoleRecords = [];
+  
+  function loadTrainingConfig() {
+    if (!state.permissions.isAdmin) {
+      showError('Administrator access required.');
+      return;
+    }
+
+    document.getElementById('trainingConfigListDialog')
+      .showModal();
+    document.getElementById(
+      'trainingConfigTable'
+    ).innerHTML =
+      '<div class="muted">Loading configuration...</div>';
+
+    acatRun()
+      .withSuccessHandler(renderTrainingConfig)
+      .withFailureHandler(showError)
+      .getTrainingConfig();
+  }
+  
+  function openTrainingConfigEditor(item) {
+  
+    if (!state.permissions.isAdmin) {
+      showError('Administrator access required.');
+      return;
+    }
+  
+    document.getElementById('configRole').value =
+      item.role;
+  
+    document.getElementById('configRoleDisplay').value =
+      item.role;
+  
+    document.getElementById('configExpiryMonths').value =
+      item.expiryMonths;
+  
+    document.getElementById('configReviewDays').value =
+      item.reviewDays;
+  
+    document
+      .getElementById('trainingConfigEditDialog')
+      .showModal();
+    document.getElementById('dialogTitle-RoleExpiry').textContent = `Edit ${item.role} Training Expiry`;
+  }
+  
+  function saveTrainingConfig() {
+  
+    const role =
+      document.getElementById('configRole').value;
+  
+    const expiryMonths =
+      Number(
+        document.getElementById(
+          'configExpiryMonths'
+        ).value
+      );
+  
+    const reviewDays =
+      Number(
+        document.getElementById(
+          'configReviewDays'
+        ).value
+      );
+  
+    if (
+      !Number.isInteger(expiryMonths) ||
+      expiryMonths < 0
+    ) {
+      showError(
+        'Expiry Limit must be a whole number of months.'
+      );
+  
+      return;
+    }
+  
+    if (
+      !Number.isInteger(reviewDays) ||
+      reviewDays < 0
+    ) {
+      showError(
+        'Review Period must be a whole number of days.'
+      );
+  
+      return;
+    }
+  
+    acatRun()
+      .withSuccessHandler(config => {
+  
+        document
+          .getElementById('trainingConfigEditDialog')
+          .close();
+  
+        renderTrainingConfig(config);
+  
+        showSuccess(
+          `${role} expiry configuration updated.`
+        );
+  
+      })
+      .withFailureHandler(showError)
+      .updateTrainingConfig(
+        role,
+        expiryMonths,
+        reviewDays
+      );
+  }
+  
+  function renderTrainingConfig(config) {
+  
+    const container =
+      document.getElementById('trainingConfigTable');
+  
+    if (!config.length) {
+      container.innerHTML =
+        '<div class="muted">No training configuration found.</div>';
+  
+      return;
+    }
+  
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>Role</th>
+            <th>Expiry Limit</th>
+            <th>Review Period</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+  
+    config.forEach(item => {
+  
+      const encoded =
+        encodeURIComponent(
+          JSON.stringify(item)
+        );
+  
+      html += `
+        <tr>
+          <td>${escapeHtml(item.role)}</td>
+  
+          <td>
+            ${escapeHtml(item.expiryMonths)} months
+          </td>
+  
+          <td>
+            ${escapeHtml(item.reviewDays)} days
+          </td>
+  
+          <td>
+            <button
+              class="action"
+              onclick="openTrainingConfigEditor(
+                JSON.parse(
+                  decodeURIComponent(${escapeJsArgument(encoded)})
+                )
+              )"
+            >
+              Edit
+            </button>
+          </td>
+        </tr>
+      `;
+  
+    });
+  
+    html += `
+        </tbody>
+      </table>
+    `;
+  
+    container.innerHTML = html;
+  }
+  
+  function openArchivedTrainingDialog() {
+    if (!state.permissions.isAdmin) {
+      showError(
+        'Administrator access required.'
+      );
+      return;
+    }
+  
+    const dialog =
+      document.getElementById(
+        'archivedTrainingDialog'
+      );
+  
+    document.getElementById(
+      'archivedTrainingSearch'
+    ).value = '';
+  
+    document.getElementById(
+      'archivedTrainingArea'
+    ).value = 'All';
+  
+    document.getElementById(
+      'archivedTrainingResults'
+    ).innerHTML =
+      '<div class="muted">Loading archived records...</div>';
+  
+    dialog.showModal();
+  
+    acatRun()
+      .withSuccessHandler(records => {
+  
+        state.archivedTrainingRecords =
+          records || [];
+  
+        renderArchivedTrainingRecords();
+  
+      })
+      .withFailureHandler(error => {
+  
+        document.getElementById(
+          'archivedTrainingResults'
+        ).innerHTML =
+          '<div class="muted">Unable to load archived records.</div>';
+  
+        showError(error);
+  
+      })
+      .getArchivedTrainingRecords();
+  }
+  
+  function renderArchivedTrainingRecords() {
+    const search =
+      document.getElementById(
+        'archivedTrainingSearch'
+      )
+        .value
+        .trim()
+        .toLowerCase();
+  
+    const selectedArea =
+      document.getElementById(
+        'archivedTrainingArea'
+      ).value;
+  
+    const records =
+      (state.archivedTrainingRecords || [])
+        .filter(record => {
+  
+          if (
+            selectedArea !== 'All' &&
+            record.area !== selectedArea
+          ) {
+            return false;
+          }
+  
+          if (
+            search &&
+            !String(record.memberName || '')
+              .toLowerCase()
+              .includes(search)
+          ) {
+            return false;
+          }
+  
+          return true;
+        });
+  
+    const container =
+      document.getElementById(
+        'archivedTrainingResults'
+      );
+  
+    if (!records.length) {
+      container.innerHTML =
+        '<div class="muted">No archived training records found.</div>';
+  
+      return;
+    }
+  
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>Member Name</th>
+            <th>Training Area</th>
+            <th>Status</th>
+            <th>Training Completion Date</th>
+            <th>Competencies Expiry</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+  
+        <tbody>
+    `;
+  
+    records.forEach(record => {
+  
+      html += `
+        <tr>
+  
+          <td>
+            ${escapeHtml(record.memberName)}
+          </td>
+  
+          <td>
+            ${escapeHtml(record.area)}
+          </td>
+  
+          <td>
+            ${escapeHtml(record.status)}
+          </td>
+  
+          <td>
+            ${escapeHtml(
+              record.trainingDate || ''
+            )}
+          </td>
+  
+          <td>
+            ${escapeHtml(
+              record.expiryDate || ''
+            )}
+          </td>
+  
+          <td>
+            <button
+              class="action primary"
+              onclick="unarchiveTraining(
+                ${escapeJsArgument(record.area)},
+                ${record.row},
+                this
+              )"
+            >
+              Unarchive
+            </button>
+          
+            <button
+              class="action danger"
+              onclick="deleteArchivedTraining(
+                ${escapeJsArgument(record.area)},
+                ${record.row},
+                ${escapeJsArgument(record.memberName)},
+                this
+              )"
+            >
+              Delete
+            </button>
+          </td>
+  
+        </tr>
+      `;
+    });
+  
+    html += `
+        </tbody>
+      </table>
+    `;
+  
+    container.innerHTML = html;
+  }
+  
+  function unarchiveTraining(
+    area,
+    row,
+    button
+  ) {
+    if (!state.permissions.isAdmin) {
+      showError(
+        'Administrator access required.'
+      );
+      return;
+    }
+  
+    if (
+      !confirm(
+        `Unarchive this ${area} training record?`
+      )
+    ) {
+      return;
+    }
+
+    // Loading state
+    button.disabled = true;
+    button.innerHTML =
+      '<span class="button-spinner"></span>Unarchiving...';
+  
+    acatRun()
+      .withSuccessHandler(records => {
+  
+        state.archivedTrainingRecords =
+          records || [];
+  
+        renderArchivedTrainingRecords();
+  
+        showSuccess(
+          'Training record unarchived.'
+        );
+  
+        /*
+         * Refresh normal training records if
+         * they've already been loaded.
+         */
+        if (
+          document.getElementById(
+            'trainingAreaFilter'
+          )
+        ) {
+          loadTrainingArea();
+        }
+  
+        /*
+         * Restore it to the dashboard graph.
+         */
+        loadTrainingChart();
+
+        /*
+         * Refresh the dashboard cards so
+         * unarchived data appears immediately.
+         */
+        refreshDashboardCounts();
+  
+      })
+      .withFailureHandler(error => {
+
+        // Restore button if the operation failed.
+        button.disabled = false;
+        button.textContent = 'Unarchive';
+
+        showError(error);
+      })
+      .unarchiveTrainingRecord(
+        area,
+        row
+      );
+  }
+  
+  function deleteArchivedTraining(
+    area,
+    row,
+    memberName,
+    button
+  ) {
+    if (!state.permissions.isAdmin) {
+      showError(
+        'Administrator access required.'
+      );
+      return;
+    }
+  
+    if (
+      !confirm(
+        `Permanently delete the archived ${area} training record for ${memberName}? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+  
+    button.disabled = true;
+    button.innerHTML =
+      '<span class="button-spinner"></span>Deleting...';
+  
+    acatRun()
+      .withSuccessHandler(records => {
+  
+        state.archivedTrainingRecords =
+          records || [];
+  
+        renderArchivedTrainingRecords();
+  
+        showSuccess(
+          `${memberName}'s archived ${area} training record was deleted.`
+        );
+  
+        /*
+         * Refresh the normal Training page in case
+         * the underlying rows have shifted.
+         */
+        if (
+          document.getElementById(
+            'trainingAreaFilter'
+          )
+        ) {
+          loadTrainingArea();
+        }
+  
+      })
+      .withFailureHandler(error => {
+  
+        button.disabled = false;
+        button.textContent = 'Delete';
+  
+        showError(error);
+  
+      })
+      .deleteArchivedTrainingRecord(
+        area,
+        row
+      );
+  }
+  
+  function openTrainingHistoryDialog() {
+    if (!state.permissions.isAdmin) {
+      showError(
+        'Administrator access required.'
+      );
+      return;
+    }
+  
+    document.getElementById(
+      'trainingHistoryFrom'
+    ).value = '';
+  
+    document.getElementById(
+      'trainingHistoryTo'
+    ).value = '';
+  
+    document.getElementById(
+      'trainingHistoryMember'
+    ).value = '';
+  
+    document.getElementById(
+      'trainingHistoryArea'
+    ).value = 'All';
+  
+    state.trainingHistoryRecords = [];
+  
+    document.getElementById(
+      'trainingHistoryResults'
+    ).innerHTML =
+      `
+        <div class="muted">
+          Select a date range and click Search.
+        </div>
+      `;
+  
+    document.getElementById(
+      'trainingHistoryDialog'
+    ).showModal();
+  }
+  
+  function searchTrainingHistory() {
+    const fromDate =
+      document.getElementById(
+        'trainingHistoryFrom'
+      ).value;
+  
+    const toDate =
+      document.getElementById(
+        'trainingHistoryTo'
+      ).value;
+  
+    const memberName =
+      document.getElementById(
+        'trainingHistoryMember'
+      ).value.trim();
+  
+    const area =
+      document.getElementById(
+        'trainingHistoryArea'
+      ).value;
+  
+    if (!fromDate || !toDate) {
+      showError(
+        'Both From and To dates are required.'
+      );
+      return;
+    }
+  
+    if (fromDate > toDate) {
+      showError(
+        'From date cannot be after To date.'
+      );
+      return;
+    }
+  
+    const button =
+      document.getElementById(
+        'trainingHistorySearchButton'
+      );
+  
+    button.disabled = true;
+    button.innerHTML =
+      '<span class="button-spinner"></span>Searching...';
+  
+    document.getElementById(
+      'trainingHistoryResults'
+    ).innerHTML =
+      '<div class="muted">Searching training history...</div>';
+  
+    acatRun()
+      .withSuccessHandler(records => {
+  
+        button.disabled = false;
+        button.textContent = 'Search';
+  
+        state.trainingHistoryRecords =
+          records || [];
+  
+        renderTrainingHistoryRecords();
+  
+      })
+      .withFailureHandler(error => {
+  
+        button.disabled = false;
+        button.textContent = 'Search';
+  
+        document.getElementById(
+          'trainingHistoryResults'
+        ).innerHTML =
+          '<div class="muted">Unable to load training history.</div>';
+  
+        showError(error);
+  
+      })
+      .searchTrainingHistory(
+        fromDate,
+        toDate,
+        memberName,
+        area
+      );
+  }
+  
+  function renderTrainingHistoryRecords() {
+    const records =
+      state.trainingHistoryRecords || [];
+  
+    const container =
+      document.getElementById(
+        'trainingHistoryResults'
+      );
+  
+    if (!records.length) {
+      container.innerHTML =
+        '<div class="muted">No matching training history records found.</div>';
+  
+      return;
+    }
+  
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>Member Name</th>
+            <th>Area</th>
+            <th>Training Date</th>
+            <th>Expiry Date</th>
+            <th>Archived</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+  
+        <tbody>
+    `;
+  
+    records.forEach(record => {
+  
+      html += `
+        <tr>
+  
+          <td>
+            ${escapeHtml(record.memberName)}
+          </td>
+  
+          <td>
+            ${escapeHtml(record.area)}
+          </td>
+  
+          <td>
+            ${escapeHtml(record.trainingDate)}
+          </td>
+  
+          <td>
+            ${escapeHtml(record.expiryDate)}
+          </td>
+  
+          <td>
+            ${
+              record.archived
+                ? 'TRUE'
+                : 'FALSE'
+            }
+          </td>
+  
+          <td>
+  
+            <button
+              class="action"
+              onclick="toggleTrainingHistoryArchive(
+                ${record.row},
+                ${record.archived},
+                this
+              )"
+            >
+              ${
+                record.archived
+                  ? 'Unarchive'
+                  : 'Archive'
+              }
+            </button>
+  
+            <button
+              class="action danger"
+              onclick="deleteTrainingHistoryRow(
+                ${record.row},
+                this
+              )"
+            >
+              Delete
+            </button>
+  
+          </td>
+  
+        </tr>
+      `;
+    });
+  
+    html += `
+        </tbody>
+      </table>
+    `;
+  
+    container.innerHTML = html;
+  }
+  
+  function toggleTrainingHistoryArchive(
+    row,
+    currentlyArchived,
+    button
+  ) {
+    const newArchived =
+      !currentlyArchived;
+  
+    const action =
+      newArchived
+        ? 'Archive'
+        : 'Unarchive';
+  
+    if (
+      !confirm(
+        `${action} this training history record?`
+      )
+    ) {
+      return;
+    }
+  
+    button.disabled = true;
+    button.innerHTML =
+      `<span class="button-spinner"></span>${action}ing...`;
+  
+    acatRun()
+      .withSuccessHandler(() => {
+  
+        showSuccess(
+          `Training history record ${newArchived ? 'archived' : 'unarchived'}.`
+        );
+  
+        /*
+         * Re-run the existing search so
+         * the dialog stays open and current.
+         */
+        searchTrainingHistory();
+  
+        /*
+         * Archived history affects the
+         * dashboard graph.
+         */
+        loadTrainingChart();
+  
+      })
+      .withFailureHandler(error => {
+  
+        button.disabled = false;
+        button.textContent =
+          currentlyArchived
+            ? 'Unarchive'
+            : 'Archive';
+  
+        showError(error);
+  
+      })
+      .setTrainingHistoryArchived(
+        row,
+        newArchived
+      );
+  }
+  
+  function deleteTrainingHistoryRow(
+    row,
+    button
+  ) {
+    if (
+      !confirm(
+        'Permanently delete this training history record? This cannot be undone.'
+      )
+    ) {
+      return;
+    }
+  
+    button.disabled = true;
+    button.innerHTML =
+      '<span class="button-spinner"></span>Deleting...';
+  
+    acatRun()
+      .withSuccessHandler(() => {
+  
+        showSuccess(
+          'Training history record deleted.'
+        );
+  
+        /*
+         * Re-run the search because deleting
+         * a row changes spreadsheet row numbers.
+         */
+        searchTrainingHistory();
+  
+        loadTrainingChart();
+  
+      })
+      .withFailureHandler(error => {
+  
+        button.disabled = false;
+        button.textContent = 'Delete';
+  
+        showError(error);
+  
+      })
+      .deleteTrainingHistoryRecord(
+        row
+      );
+  }
+  
+  function openRoleManagementDialog() {
+    if (!state.permissions.isAdmin) {
+      showError('Administrator access required.');
+      return;
+    }
+  
+    acatRun()
+      .withSuccessHandler(records => {
+        editableRoleRecords = records || [];
+        renderRoleEditor();
+  
+        document
+          .getElementById('roleManagementDialog')
+          .showModal();
+      })
+      .withFailureHandler(showError)
+      .getRoleRecords();
+  }
+  
+  function renderRoleEditor() {
+    const container =
+      document.getElementById('roleManagementResults');
+  
+    container.innerHTML = `
+      <table class="role-editor-table">
+        <thead>
+          <tr>
+            <th>Member Name</th>
+            <th>Email</th>
+            <th>Admin</th>
+            <th>Mission Creator</th>
+            <th>Recruiter</th>
+            <th>Trainer</th>
+          </tr>
+        </thead>
+  
+        <tbody>
+          ${editableRoleRecords.map((record, index) => `
+            <tr data-role-index="${index}">
+              <td>
+                <input
+                  data-field="memberName"
+                  value="${escapeAttr(record.memberName || '')}"
+                >
+              </td>
+  
+              <td>
+                <input
+                  data-field="email"
+                  type="email"
+                  value="${escapeAttr(record.email || '')}"
+                >
+              </td>
+  
+              ${renderRoleCheckbox_(
+                'administrator',
+                record.administrator
+              )}
+  
+              ${renderRoleCheckbox_(
+                'missionCreator',
+                record.missionCreator
+              )}
+  
+              ${renderRoleCheckbox_(
+                'recruiter',
+                record.recruiter
+              )}
+  
+              ${renderRoleCheckbox_(
+                'trainer',
+                record.trainer
+              )}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+  
+  function renderRoleCheckbox_(field, checked) {
+    return `
+      <td class="role-checkbox-cell">
+        <input
+          data-field="${field}"
+          type="checkbox"
+          ${checked ? 'checked' : ''}
+        >
+      </td>
+    `;
+  }
+  
+  function addRoleEditorRow() {
+    editableRoleRecords.push({
+      row: null,
+      memberName: '',
+      email: '',
+      administrator: false,
+      missionCreator: false,
+      recruiter: false,
+      trainer: false
+    });
+  
+    renderRoleEditor();
+  }
+  
+  function saveRoleRecords() {
+    const button =
+      document.getElementById('saveRoleRecordsButton');
+  
+    const records = Array.from(
+      document.querySelectorAll('[data-role-index]')
+    ).map(row => {
+      const original =
+        editableRoleRecords[Number(row.dataset.roleIndex)];
+  
+      const read = field =>
+        row.querySelector(`[data-field="${field}"]`);
+  
+      return {
+        row: original.row,
+        memberName: read('memberName').value.trim(),
+        email: read('email').value.trim(),
+        administrator: read('administrator').checked,
+        missionCreator: read('missionCreator').checked,
+        recruiter: read('recruiter').checked,
+        trainer: read('trainer').checked
+      };
+    });
+  
+    button.disabled = true;
+    button.textContent = 'Saving...';
+  
+    acatRun()
+      .withSuccessHandler(updatedRecords => {
+        button.disabled = false;
+        button.textContent = 'Save Changes';
+  
+        editableRoleRecords = updatedRecords || [];
+        renderRoleEditor();
+        refreshRoleNames();
+  
+        showSuccess('User roles updated.');
+      })
+      .withFailureHandler(error => {
+        button.disabled = false;
+        button.textContent = 'Save Changes';
+        showError(error);
+      })
+      .saveRoleRecords(records);
+  }
+
+</script>

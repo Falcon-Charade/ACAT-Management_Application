@@ -1,0 +1,623 @@
+<!--
+  @file PMC.html
+  @description Provides client-side Potential Mission Creator (PMC) record
+  display, creation, progression, archiving, and deletion workflows for the
+  ACAT Management Application.
+
+  Responsibilities:
+  - Renders active PMC records and permission-appropriate actions.
+  - Creates PMC records for selected full members.
+  - Detects previously archived records during creation.
+  - Allows archived records to be restored or a new record to be created.
+  - Edits PMC phases and consecutive good-mission counts.
+  - Previews script and asset permissions associated with each phase.
+  - Archives, restores, and permanently deletes PMC records.
+  - Refreshes PMC state and dashboard totals after changes.
+
+  Important:
+  - Mission Creators and administrators can create and update PMC records.
+  - Only administrators can archive, restore, or permanently delete records.
+  - Client-side permission checks control visibility and interaction only;
+    server-side authorization remains required.
+  - Phase 1 allows no scripts or assets, Phase 2 allows assets only, and
+    Phase 3 allows both scripts and assets.
+  - Client-side phase values are previews; the server derives and validates
+    the saved permissions.
+  - Permanent deletion cannot be undone and requires confirmation.
+  - Values inserted into generated HTML must use `escapeHtml()` or
+    `escapeAttr()` as appropriate.
+  - State properties and DOM element IDs must remain synchronized with App.html
+    and Index.html.
+
+  Dependencies:
+  - Shared `state` and `pendingArchivedPMC` values from App.html.
+  - Google Apps Script `acatRun()` client API.
+  - Server-side PMC creation, update, archive, restore, and deletion functions.
+  - Shared member-selection, escaping, notification, and dashboard utilities.
+  - PMC tables, forms, buttons, and dialogs defined in Index.html.
+-->
+
+<script>
+  
+  function renderPMC() {
+
+    const items = state.pmcRecords;
+
+    if (!items.length) {
+      document.getElementById('pmcTable').innerHTML =
+        '<div class="muted">No PMC records found.</div>';
+
+      return;
+    }
+
+    const headers = [
+      'Member Name',
+      'Phase',
+      'Scripts Allowed',
+      'Assets Allowed',
+      'Consecutive Good Missions'
+    ];
+
+    let html = `
+      <table>
+        <thead>
+          <tr>
+    `;
+
+    headers.forEach(header => {
+      html += `<th>${escapeHtml(header)}</th>`;
+    });
+
+    if (state.permissions.isAdmin || state.permissions.isMissionCreator) {
+      html += '<th>Actions</th>';
+    }
+
+    html += `
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    items.forEach(item => {
+
+      html += '<tr>';
+
+      headers.forEach(header => {
+        html += `<td>${escapeHtml(item[header] ?? '')}</td>`;
+      });
+  
+      if (state.permissions.isAdmin || state.permissions.isMissionCreator) {
+
+        html += `
+          <td>
+            <button
+              class="action"
+              onclick="openEditPMC(${item._row})"
+            >
+              Edit
+            </button>
+        `;
+      }
+
+      if (state.permissions.isAdmin) {
+        
+        html += `
+            <button
+              class="action"
+              onclick="archivePMC(
+                ${item._row},
+                ${escapeJsArgument(item['Member Name'] || '')},
+                this
+              )"
+            >
+              Archive
+            </button>
+  
+            <button
+              class="action danger"
+              onclick="removePMC(${item._row}, this)"
+            >
+              Delete
+            </button>
+        `;
+      }
+
+      html += '</td>';
+
+      html += '</tr>';
+    });
+
+    html += `
+        </tbody>
+      </table>
+    `;
+
+    document.getElementById('pmcTable').innerHTML = html;
+  }
+  
+  function openAddPMC() {
+    document.getElementById('pmcAddDialog').showModal();
+  }
+  
+  function saveNewPMC() {
+    const saveButton =
+      document.getElementById(
+        'pmcAddSaveButton'
+      );
+    const memberName = readSelectedFullMember('missionAddMember');
+    if (!memberName) return;
+
+    saveButton.disabled = true;
+    saveButton.innerHTML =
+      '<span class="button-spinner"></span>Saving...';
+  
+    acatRun()
+      .withSuccessHandler(result => {
+
+        saveButton.disabled = false;
+        saveButton.textContent = 'Save';
+  
+        if (
+          result?.status ===
+          'archivedExists'
+        ) {
+          pendingArchivedPMC = {
+            memberName:
+              result.memberName,
+
+            archivedRecords:
+              result.archivedRecords || []
+          };
+
+          document.getElementById(
+            'pmcAddDialog'
+          ).close();
+
+          document.getElementById(
+            'pmcArchivedChoiceMessage'
+          ).textContent =
+            `Archived PMC records were found for ${result.memberName}. You may restore any of them or create a new record.`;
+
+          renderArchivedPMCChoices();
+
+          document.getElementById(
+            'pmcArchivedChoiceDialog'
+          ).showModal();
+
+          return;
+        }
+  
+        if (
+          result?.status ===
+          'created'
+        ) {
+          state.pmcRecords =
+            result.records || [];
+  
+          document.getElementById(
+            'pmcAddDialog'
+          ).close();
+  
+          renderPMC();
+          updateDashboard();
+  
+          showSuccess(
+            'Potential Mission Creator added.'
+          );
+        }
+  
+      })
+      .withFailureHandler(error => {
+        saveButton.disabled = false;
+        saveButton.textContent = 'Save';
+        showError(error);
+        })
+      .addPMCRecord(memberName);
+  }
+  
+  function openEditPMC(row) {
+
+    const item = state.pmcRecords.find(
+      record => record._row === row
+    );
+
+    if (!item) return;
+
+    document.getElementById('pmcRow').value =
+      row;
+
+    document.getElementById('pmcId').value =
+      item['ID'] ?? '';
+
+    document.getElementById('pmcMemberName').value =
+      item['Member Name'] ?? '';
+
+    document.getElementById(
+      'pmcPhase'
+    ).value =
+      item['Phase'] ?? 'Phase 1';
+
+    updatePMCPhaseFields(false);
+
+    document.getElementById('pmcGoodMissions').value =
+      item['Consecutive Good Missions'] ?? 0;
+
+    document.getElementById('pmcDialog').showModal();
+  }
+  
+  function savePMC(button) {
+
+    button.disabled = true;
+    button.innerHTML =
+      '<span class="button-spinner"></span>Saving...';
+
+    const row =
+      Number(document.getElementById('pmcRow').value);
+
+    const phase =
+      document.getElementById(
+        'pmcPhase'
+      ).value;
+
+    const updates = {
+      'Phase':
+        phase,
+
+      'Consecutive Good Missions':
+        Number(
+          document.getElementById(
+            'pmcGoodMissions'
+          ).value || 0
+        )
+    };
+
+    acatRun()
+      .withSuccessHandler(records => {
+        button.disabled = false;
+        button.textContent = 'Save';
+        state.pmcRecords = records;
+        document.getElementById('pmcDialog').close();
+        renderPMC();
+        showSuccess('PMC record updated.');
+      })
+      .withFailureHandler(error => {
+        button.disabled = false;
+        button.textContent = 'Save';
+        showError(error);
+      })
+      .updatePMCRecord(row, updates);
+  }
+  
+  function updatePMCPhaseFields() {
+    const phase =
+      document.getElementById(
+        'pmcPhase'
+      ).value;
+  
+    const settings =
+      getPMCPhaseSettings(phase);
+  
+    document.getElementById(
+      'pmcScriptsAllowed'
+    ).value =
+      settings.scriptsAllowed;
+  
+    document.getElementById(
+      'pmcAssetsAllowed'
+    ).value =
+      settings.assetsAllowed;
+  }
+  
+  function getPMCPhaseSettings(phase) {
+    switch (phase) {
+      case 'Phase 1':
+        return {
+          scriptsAllowed: 'No',
+          assetsAllowed: 'No'
+        };
+  
+      case 'Phase 2':
+        return {
+          scriptsAllowed: 'No',
+          assetsAllowed: 'Yes'
+        };
+  
+      case 'Phase 3':
+        return {
+          scriptsAllowed: 'Yes',
+          assetsAllowed: 'Yes'
+        };
+  
+      default:
+        return {
+          scriptsAllowed: 'No',
+          assetsAllowed: 'No'
+        };
+    }
+  }
+  
+  function archivePMC(
+    row,
+    memberName,
+    button
+  ) {
+    if (!state.permissions.isAdmin) {
+      showError(
+        'Administrator access required.'
+      );
+      return;
+    }
+  
+    if (
+      !confirm(
+        `Archive PMC record for ${memberName}?`
+      )
+    ) {
+      return;
+    }
+  
+    button.disabled = true;
+  
+    button.innerHTML =
+      '<span class="button-spinner"></span>Archiving...';
+  
+    acatRun()
+      .withSuccessHandler(records => {
+  
+        state.pmcRecords =
+          records || [];
+  
+        renderPMC();
+        updateDashboard();
+  
+        showSuccess(
+          `${memberName} PMC record archived.`
+        );
+  
+      })
+      .withFailureHandler(error => {
+  
+        button.disabled = false;
+        button.textContent = 'Archive';
+  
+        showError(error);
+  
+      })
+      .archivePMCRecord(row);
+  }
+  
+  function removePMC(row, button) {
+
+    if (!confirm('Delete this PMC record?')) {
+      return;
+    }
+
+    button.disabled = true;
+    button.innerHTML =
+      '<span class="button-spinner"></span>Deleting...';
+
+    acatRun()
+      .withSuccessHandler(records => {
+
+        state.pmcRecords = records;
+
+        renderPMC();
+
+        updateDashboard();
+
+        showSuccess('PMC record deleted.');
+
+      })
+      .withFailureHandler(error => {
+        button.disabled = false;
+        button.textContent = 'Delete';
+        showError(error);
+      })
+      .deletePMCRecord(row);
+  }
+  
+  function restoreArchivedPMC(
+    row,
+    button
+  ) {
+    if (!pendingArchivedPMC) {
+      return;
+    }
+  
+    const memberName =
+      pendingArchivedPMC.memberName;
+  
+    button.disabled = true;
+    button.innerHTML =
+      '<span class="button-spinner"></span>Unarchiving...';
+  
+    acatRun()
+      .withSuccessHandler(records => {
+  
+        state.pmcRecords =
+          records || [];
+  
+        /*
+         * Remove only the record that was
+         * just restored from this dialog.
+         */
+        pendingArchivedPMC.archivedRecords =
+          pendingArchivedPMC
+            .archivedRecords
+            .filter(record =>
+              Number(record.row) !==
+              Number(row)
+            );
+  
+        renderPMC();
+        updateDashboard();
+  
+        /*
+         * Re-render the dialog but DON'T
+         * close it.
+         */
+        renderArchivedPMCChoices();
+  
+        showSuccess(
+          `${memberName} PMC record unarchived.`
+        );
+  
+      })
+      .withFailureHandler(error => {
+  
+        button.disabled = false;
+        button.textContent =
+          'Unarchive';
+  
+        showError(error);
+  
+      })
+      .unarchivePMCRecord(row);
+  }
+  
+  function createNewPMCAfterArchive() {
+    if (!pendingArchivedPMC) {
+      return;
+    }
+
+    const button =
+      document.getElementById(
+        'pmcCreateNewButton'
+      );
+  
+    const memberName =
+      pendingArchivedPMC.memberName;
+
+    button.disabled = true;
+    button.innerHTML =
+      '<span class="button-spinner"></span>Creating...';
+  
+    acatRun()
+      .withSuccessHandler(records => {
+
+        button.disabled = false;
+        button.textContent =
+          'Create New Record';
+  
+        state.pmcRecords =
+          records || [];
+  
+        pendingArchivedPMC =
+          null;
+
+        document.getElementById(
+          'pmcArchivedChoiceDialog'
+        ).close();
+  
+        renderPMC();
+        updateDashboard();
+  
+        showSuccess(
+          `New PMC record created for ${memberName}.`
+        );
+  
+      })
+      .withFailureHandler(error => {
+        button.disabled = false;
+        button.textContent =
+          'Create New Record';
+        
+        showError(error);
+        })
+      .addPMCRecordIgnoringArchived(
+        memberName
+      );
+  }
+  
+  function renderArchivedPMCChoices() {
+    const container =
+      document.getElementById(
+        'pmcArchivedChoiceResults'
+      );
+  
+    const records =
+      pendingArchivedPMC
+        ?.archivedRecords || [];
+  
+    if (!records.length) {
+      container.innerHTML = `
+        <div class="muted">
+          No archived PMC records remain.
+        </div>
+      `;
+  
+      return;
+    }
+  
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Phase</th>
+            <th>Scripts Allowed</th>
+            <th>Assets Allowed</th>
+            <th>Consecutive Good Missions</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+  
+        <tbody>
+    `;
+  
+    records.forEach(record => {
+  
+      html += `
+        <tr>
+  
+          <td>
+            ${escapeHtml(record.id)}
+          </td>
+  
+          <td>
+            ${escapeHtml(record.phase)}
+          </td>
+  
+          <td>
+            ${escapeHtml(
+              record.scriptsAllowed
+            )}
+          </td>
+  
+          <td>
+            ${escapeHtml(
+              record.assetsAllowed
+            )}
+          </td>
+  
+          <td>
+            ${escapeHtml(
+              record.goodMissions
+            )}
+          </td>
+  
+          <td>
+            <button
+              class="action"
+              onclick="restoreArchivedPMC(
+                ${record.row},
+                this
+              )"
+            >
+              Unarchive
+            </button>
+          </td>
+  
+        </tr>
+      `;
+    });
+  
+    html += `
+        </tbody>
+      </table>
+    `;
+  
+    container.innerHTML = html;
+  }
+
+</script>

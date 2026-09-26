@@ -1,0 +1,746 @@
+<!--
+  @file Utils.html
+  @description Provides shared client-side formatting, form-building, feedback,
+  member-selection, and DOM utilities for the ACAT Management Application.
+
+  Responsibilities:
+  - Escapes text and attribute values before insertion into generated HTML.
+  - Builds reusable text, number, date, select, and checkbox form controls.
+  - Displays timed success and error messages in the active dialog or page.
+  - Creates accessible, keyboard-navigable member suggestion comboboxes.
+  - Validates that selected names belong to full members.
+  - Populates member, recruiter, role, and training-area selectors.
+  - Determines available display headers from returned records.
+  - Converts Australian display dates into HTML date-input format.
+
+  Important:
+  - Dynamic values must be escaped with `escapeHtml()` or `escapeAttr()` before
+    being inserted into generated markup.
+  - Generated member form controls use `data-member-field` to identify fields.
+  - Member selection is case-insensitive and requires an exact full-member match.
+  - Feedback messages are displayed in the active dialog when possible and are
+    automatically hidden after a configured duration.
+  - The member combobox supports arrow keys, Enter, Escape, and Tab.
+  - Selector IDs, state properties, and field names must remain synchronized
+    with App.html and Index.html.
+  - Supported date values are `YYYY-MM-DD` and Australian `DD/MM/YYYY`.
+
+  Dependencies:
+  - Shared application state from App.html.
+  - `updateMemberSortOptions()` from Members.html.
+  - Form, feedback, combobox, and selector elements defined in Index.html.
+  - Component classes and feedback styling defined in Styles.html.
+  - Standard browser DOM, event, timer, and `WeakMap` APIs.
+-->
+
+<script>
+  
+  const feedbackTimers = new WeakMap();
+  
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+  
+  function escapeJsArgument(value) {
+    return escapeHtml(JSON.stringify(String(value)));
+  }
+
+  function escapeAttr(value) {
+    return escapeHtml(value);
+  }
+  
+  function createTextField(field, value) {
+    return `
+      <div class="form-row">
+        <label>${escapeHtml(field)}</label>
+  
+        <input
+          type="text"
+          data-member-field="${escapeAttr(field)}"
+          value="${escapeAttr(value)}"
+        >
+      </div>
+    `;
+  }
+  
+  function createNumberField(field, value) {
+    return `
+      <div class="form-row">
+        <label>${escapeHtml(field)}</label>
+  
+        <input
+          type="number"
+          min="0"
+          step="1"
+          data-member-field="${escapeAttr(field)}"
+          value="${escapeAttr(value)}"
+        >
+      </div>
+    `;
+  }
+  
+  function createDateField(field, value) {
+    const formatted =
+      formatDateForInput(value);
+  
+    return `
+      <div class="form-row">
+        <label>${escapeHtml(field)}</label>
+  
+        <input
+          type="date"
+          data-member-field="${escapeAttr(field)}"
+          value="${escapeAttr(formatted)}"
+        >
+      </div>
+    `;
+  }
+  
+  function createSelectField(
+    field,
+    value,
+    options,
+    allowBlank = false
+  ) {
+    let optionsHtml = '';
+  
+    if (allowBlank) {
+      optionsHtml += `
+        <option value="">None</option>
+      `;
+    }
+  
+    options.forEach(option => {
+      const selected =
+        String(option) === String(value)
+          ? 'selected'
+          : '';
+  
+      optionsHtml += `
+        <option
+          value="${escapeAttr(option)}"
+          ${selected}
+        >
+          ${escapeHtml(option)}
+        </option>
+      `;
+    });
+  
+    return `
+      <div class="form-row">
+        <label>${escapeHtml(field)}</label>
+  
+        <select
+          data-member-field="${escapeAttr(field)}"
+        >
+          ${optionsHtml}
+        </select>
+      </div>
+    `;
+  }
+  
+  function createCheckboxField(field, value) {
+    const checked =
+      String(value).toLowerCase() === 'true' ||
+      String(value).toLowerCase() === 'yes' ||
+      String(value).toLowerCase() === 'y' ||
+      value === true;
+  
+    return `
+      <div class="form-row checkbox-row">
+  
+        <label class="checkbox-option">
+  
+          <input
+            type="checkbox"
+            data-member-field="${escapeAttr(field)}"
+            ${checked ? 'checked' : ''}
+          >
+  
+          <span>
+            ${escapeHtml(field)}
+          </span>
+  
+        </label>
+  
+      </div>
+    `;
+  }
+  
+  function createReadOnlyCheckboxField(
+    field,
+    value
+  ) {
+    const checked =
+      value === true ||
+      String(value || '')
+        .trim()
+        .toLowerCase() === 'true';
+  
+    return `
+      <div class="form-row checkbox-row">
+  
+        <label class="checkbox-option">
+  
+          <input
+            type="checkbox"
+            ${checked ? 'checked' : ''}
+            disabled
+          >
+  
+          <span>
+            ${escapeHtml(field)}
+          </span>
+  
+        </label>
+  
+      </div>
+    `;
+  }
+  
+  function showError(error) {
+    displayFeedback_('error', error, 8000);
+  }
+  
+  function showSuccess(message) {
+    displayFeedback_('success', message, 4000);
+  }
+  
+  function displayFeedback_(type, message, duration) {
+    const box = getFeedbackBox_(type);
+  
+    const existingTimer = feedbackTimers.get(box);
+  
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+  
+    box.textContent =
+      message?.message ||
+      message ||
+      (type === 'error' ? 'Unknown error' : '');
+  
+    box.style.display = 'block';
+  
+    const feedback = box.closest('.dialog-feedback');
+  
+    if (feedback) {
+      const otherType =
+        type === 'error' ? 'success' : 'error';
+  
+      const otherBox =
+        feedback.querySelector(`.${otherType}`);
+  
+      if (otherBox) {
+        otherBox.style.display = 'none';
+      }
+    }
+  
+    const timer = setTimeout(() => {
+      box.style.display = 'none';
+      feedbackTimers.delete(box);
+    }, duration);
+  
+    feedbackTimers.set(box, timer);
+  }
+  
+  function getFeedbackBox_(type) {
+    const dialog = getActiveDialog_();
+  
+    if (!dialog) {
+      return document.getElementById(
+        type === 'error' ? 'errorBox' : 'successBox'
+      );
+    }
+  
+    const dialogBody =
+      dialog.querySelector('.dialog-body') || dialog;
+  
+    let feedback =
+      dialogBody.querySelector(':scope > .dialog-feedback');
+  
+    if (!feedback) {
+      feedback = document.createElement('div');
+      feedback.className = 'dialog-feedback';
+      feedback.setAttribute('aria-live', 'polite');
+  
+      dialogBody.prepend(feedback);
+    }
+  
+    let box =
+      feedback.querySelector(`.${type}`);
+  
+    if (!box) {
+      box = document.createElement('div');
+      box.className = type;
+      box.setAttribute(
+        'role',
+        type === 'error' ? 'alert' : 'status'
+      );
+  
+      feedback.append(box);
+    }
+  
+    return box;
+  }
+  
+  function getActiveDialog_() {
+    // Prefer the dialog currently containing keyboard focus.
+    const focusedDialog =
+      document.activeElement?.closest?.('dialog[open]');
+  
+    if (focusedDialog) {
+      return focusedDialog;
+    }
+  
+    // Otherwise use the last open dialog.
+    const openDialogs = Array.from(
+      document.querySelectorAll('dialog[open]')
+    );
+  
+    return openDialogs.at(-1) || null;
+  }
+  
+  function setupMemberSearch(inputId, names) {
+    const input = document.getElementById(inputId);
+  
+    // Refresh the names when member data changes.
+    if (input.updateMemberNames) {
+      input.updateMemberNames(names);
+      return;
+    }
+  
+    input.removeAttribute('list');
+    input.autocomplete = 'off';
+  
+    const wrapper = document.createElement('div');
+    wrapper.className = 'member-combobox';
+    input.before(wrapper);
+    wrapper.append(input);
+  
+    const panel = document.createElement('div');
+    panel.id = `${inputId}Suggestions`;
+    panel.className = 'member-suggestions';
+    panel.setAttribute('role', 'listbox');
+    panel.setAttribute('aria-label', 'Member suggestions');
+    panel.hidden = true;
+    wrapper.append(panel);
+  
+    input.setAttribute('role', 'combobox');
+    input.setAttribute('aria-autocomplete', 'list');
+    input.setAttribute('aria-haspopup', 'listbox');
+    input.setAttribute('aria-controls', panel.id);
+    input.setAttribute('aria-expanded', 'false');
+  
+    let availableNames = [...new Set(names)];
+    let matches = [];
+    let activeIndex = -1;
+  
+    function close() {
+      panel.hidden = true;
+      activeIndex = -1;
+      input.setAttribute('aria-expanded', 'false');
+      input.removeAttribute('aria-activedescendant');
+    }
+  
+    function select(name) {
+      input.value = name;
+      close();
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  
+    function setActive(index) {
+      activeIndex = index;
+  
+      Array.from(panel.children).forEach((option, i) => {
+        option.setAttribute('aria-selected', String(i === index));
+      });
+  
+      const option = panel.children[index];
+  
+      if (option) {
+        input.setAttribute('aria-activedescendant', option.id);
+        option.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  
+    function render() {
+      const query = input.value.trim().toLowerCase();
+  
+      matches = availableNames.filter(name =>
+        name.toLowerCase().includes(query)
+      );
+  
+      activeIndex = -1;
+      input.removeAttribute('aria-activedescendant');
+      panel.replaceChildren();
+  
+      matches.forEach((name, index) => {
+        const option = document.createElement('div');
+        option.id = `${panel.id}-${index}`;
+        option.className = 'member-option';
+        option.setAttribute('role', 'option');
+        option.setAttribute('aria-selected', 'false');
+        option.textContent = name;
+  
+        // Keep focus in the input while choosing a suggestion.
+        option.addEventListener('mousedown', event => {
+          event.preventDefault();
+        });
+  
+        option.addEventListener('click', () => select(name));
+        panel.append(option);
+      });
+  
+      if (!matches.length) {
+        const empty = document.createElement('div');
+        empty.className = 'member-no-results';
+        empty.setAttribute('role', 'status');
+        empty.textContent = 'No matching members';
+        panel.append(empty);
+      }
+  
+      panel.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+    }
+  
+    input.addEventListener('focus', render);
+    input.addEventListener('click', render);
+    input.addEventListener('input', render);
+    input.addEventListener('blur', close);
+  
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !panel.hidden) {
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+        return;
+      }
+  
+      if (event.key === 'Tab') {
+        close();
+        return;
+      }
+  
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+  
+        if (panel.hidden) render();
+        if (!matches.length) return;
+  
+        const next = event.key === 'ArrowDown'
+          ? (activeIndex + 1) % matches.length
+          : (activeIndex <= 0 ? matches.length : activeIndex) - 1;
+  
+        setActive(next);
+      }
+  
+      if (
+        event.key === 'Enter' &&
+        !panel.hidden &&
+        activeIndex >= 0
+      ) {
+        event.preventDefault();
+        select(matches[activeIndex]);
+      }
+    });
+  
+    input.closest('dialog')?.addEventListener('close', close);
+  
+    input.updateMemberNames = updatedNames => {
+      availableNames = [...new Set(updatedNames)];
+  
+      if (document.activeElement === input) {
+        render();
+      } else {
+        close();
+      }
+    };
+  }
+  
+  function readSelectedFullMember(inputId) {
+    const input = document.getElementById(inputId);
+    const query = input.value.trim().toLowerCase();
+  
+    const member = state.members.find(item =>
+      String(item['Role'] || '').trim().toLowerCase() === 'member' &&
+      String(item['Member Name'] ?? item['Name'] ?? '')
+        .trim().toLowerCase() === query
+    );
+  
+    if (!query || !member) {
+      showError('Select a full member from the suggestions.');
+      input.focus();
+      return '';
+    }
+  
+    const name = member['Member Name'] ?? member['Name'];
+    input.value = name;
+    return name;
+  }
+  
+  function populateMemberSelectors() {
+    const allNames = state.members
+      .map(m =>
+        m['Member Name'] ??
+        m['Name'] ??
+        ''
+      )
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+  
+    const trainingMemberNames = state.members
+      .filter(member =>
+        String(member['Role'] || '')
+          .trim()
+          .toLowerCase() === 'member'
+      )
+      .map(member =>
+        member['Member Name'] ??
+        member['Name'] ??
+        ''
+      )
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+
+    // Recruiter selector
+    document.getElementById(
+      'newMemberRecruiter'
+    ).innerHTML =
+      `
+        <option value="">
+          None
+        </option>
+      ` +
+      (state.recruiters || [])
+        .filter(Boolean)
+        .sort((a, b) =>
+          a.localeCompare(b)
+        )
+        .map(name =>
+          `
+            <option value="${escapeAttr(name)}">
+              ${escapeHtml(name)}
+            </option>
+          `
+        )
+        .join('');
+  
+    // Populate each dialog's member suggestions.
+    setupMemberSearch('missionAddMember', trainingMemberNames);
+    setupMemberSearch('trainingEditMember', trainingMemberNames);
+  
+    // Training area editor
+    document.getElementById(
+      'trainingEditArea'
+    ).innerHTML =
+      state.trainingSheets
+        .map(area =>
+          `<option value="${escapeAttr(area)}">${escapeHtml(area)}</option>`
+        )
+        .join('');
+  
+    // Training page filter
+    document.getElementById(
+      'trainingAreaFilter'
+    ).innerHTML =
+      `
+        <option value="All">
+          All Training Areas
+        </option>
+      ` +
+      state.trainingSheets
+        .map(area =>
+          `<option value="${escapeAttr(area)}">${escapeHtml(area)}</option>`
+        )
+        .join('');
+  
+    // Dashboard chart filter
+    document.getElementById(
+      'chartTrainingArea'
+    ).innerHTML =
+      `
+        <option value="All">
+          All Training Areas
+        </option>
+      ` +
+      state.trainingSheets
+        .map(area =>
+          `<option value="${escapeAttr(area)}">${escapeHtml(area)}</option>`
+        )
+        .join('');
+    
+    // Archive Current Training
+    document.getElementById(
+      'archivedTrainingArea'
+    ).innerHTML =
+      `
+        <option value="All">
+          All Training Areas
+        </option>
+      ` +
+      state.trainingSheets
+        .map(area =>
+          `
+            <option value="${escapeAttr(area)}">
+              ${escapeHtml(area)}
+            </option>
+          `
+        )
+        .join('');
+    
+    // Archive Historical Training
+      document.getElementById(
+      'trainingHistoryArea'
+    ).innerHTML =
+      `
+        <option value="All">
+          All Training Areas
+        </option>
+      ` +
+      state.trainingSheets
+        .map(area =>
+          `
+            <option value="${escapeAttr(area)}">
+              ${escapeHtml(area)}
+            </option>
+          `
+        )
+        .join('');
+    
+    // Member Role filter
+    
+    const canViewBanned =
+      state.permissions.isAdmin ||
+      state.permissions.isRecruiter;
+    
+    const memberRoles = [
+      ...new Set(
+        state.members
+          .map(member =>
+            String(
+              member['Role'] || ''
+            ).trim()
+          )
+          .filter(Boolean)
+          .filter(role =>
+            canViewBanned ||
+            role.toLowerCase() !== 'banned'
+          )
+      )
+    ].sort((a, b) =>
+      a.localeCompare(b)
+    );
+    
+    document.getElementById(
+      'memberRoleFilter'
+    ).innerHTML =
+      `
+        <option value="All">
+          All Roles
+        </option>
+      ` +
+      memberRoles
+        .map(role =>
+          `
+            <option value="${escapeAttr(role)}">
+              ${escapeHtml(role)}
+            </option>
+          `
+        )
+        .join('');
+
+    // Update availability of "Next Progression Date"
+    // now that the Role filter exists/populated.
+    updateMemberSortOptions();
+    
+    // Member Recruiter filter
+    const memberRecruiters = [
+      ...new Set(
+        state.members
+          .map(member =>
+            String(
+              member['Recruiter'] || ''
+            ).trim()
+          )
+          .filter(Boolean)
+      )
+    ].sort((a, b) =>
+      a.localeCompare(b)
+    );
+    
+    document.getElementById(
+      'memberRecruiterFilter'
+    ).innerHTML =
+      `
+        <option value="All">
+          All Recruiters
+        </option>
+      ` +
+      memberRecruiters
+        .map(recruiter =>
+          `
+            <option value="${escapeAttr(recruiter)}">
+              ${escapeHtml(recruiter)}
+            </option>
+          `
+        )
+        .join('');
+  }
+
+  function getDisplayHeaders(rows, preferredOrder) {
+    const availableHeaders = new Set();
+
+    rows.forEach(row => {
+      Object.keys(row).forEach(key => {
+        if (key !== '_row') {
+          availableHeaders.add(key);
+        }
+      });
+    });
+
+    return preferredOrder.filter(header =>
+      availableHeaders.has(header)
+    );
+  }
+  
+  function formatDateForInput(value) {
+    if (!value) {
+      return '';
+    }
+  
+    value = String(value).trim();
+  
+    // Already yyyy-mm-dd
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return value;
+    }
+  
+    // Australian dd/mm/yyyy
+    const match =
+      value.match(
+        /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
+      );
+  
+    if (!match) {
+      return '';
+    }
+  
+    const day =
+      match[1].padStart(2, '0');
+  
+    const month =
+      match[2].padStart(2, '0');
+  
+    const year =
+      match[3];
+  
+    return `${year}-${month}-${day}`;
+  }
+
+</script>

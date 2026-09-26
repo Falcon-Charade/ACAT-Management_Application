@@ -1,0 +1,1622 @@
+<!--
+  @file Members.html
+  @description Provides client-side member creation, listing, filtering,
+  viewing, editing, progression, and deletion workflows for the ACAT
+  Management Application.
+
+  Responsibilities:
+  - Creates new member records from dialog input.
+  - Filters members by search text, role, and recruiter.
+  - Sorts members alphabetically, by ID, or by next progression date.
+  - Hides banned members from users without appropriate permissions.
+  - Displays standard, progression-specific, and extended member details.
+  - Builds member editing controls according to progression state.
+  - Previews automatic role, stage, and readiness changes.
+  - Submits member additions, updates, and deletions to the server.
+  - Refreshes member tables, selectors, and dashboard metrics after changes.
+  - Parses supported member date and Boolean formats.
+
+  Important:
+  - Member data and permissions are read from the shared `state` object.
+  - Client-side permission checks control visibility and interaction only;
+    server-side authorization remains required.
+  - Generated member values must be escaped with `escapeHtml()` before being
+    inserted into the page.
+  - Administrators and recruiters can view notes and manage existing members.
+  - The server restricts member creation to administrators.
+  - Progression previews must remain consistent with the server-side rules in
+    Members.js.
+  - Member field names and DOM element IDs must remain synchronized with the
+    spreadsheet columns and Index.html.
+
+  Dependencies:
+  - Shared application state and `viewedMember` reference from App.html.
+  - Google Apps Script `acatRun()` client API.
+  - Server-side `addMember()`, `updateMember()`, and `deleteMember()` functions.
+  - Shared field-building, escaping, notification, rendering, and selector
+    utilities.
+  - Member forms, tables, buttons, and dialogs defined in Index.html.
+-->
+
+<script>
+  
+  function openAddMember() {
+    document.getElementById(
+      'newMemberName'
+    ).value = '';
+
+    document.getElementById(
+      'newMemberRecruiter'
+    ).value = '';
+  
+    document.getElementById(
+      'newMemberDiscordJoinDate'
+    ).value = '';
+  
+    document.getElementById(
+      'memberDialog'
+    ).showModal();
+  }
+  
+  function saveNewMember() {
+    const name =
+      document.getElementById(
+        'newMemberName'
+      ).value.trim();
+  
+    const recruiter =
+      document.getElementById(
+        'newMemberRecruiter'
+      ).value;
+  
+    const discordJoinDate =
+      document.getElementById(
+        'newMemberDiscordJoinDate'
+      ).value;
+  
+    if (!name) {
+      showError(
+        'Member name is required.'
+      );
+      return;
+    }
+  
+    acatRun()
+      .withSuccessHandler(members => {
+  
+        state.members =
+          members || [];
+  
+        document.getElementById(
+          'memberDialog'
+        ).close();
+  
+        renderMembers();
+        populateMemberSelectors();
+        updateDashboard();
+  
+        showSuccess(
+          'Member added.'
+        );
+  
+      })
+      .withFailureHandler(showError)
+      .addMember({
+        name,
+        recruiter,
+        discordJoinDate
+      });
+  }
+  
+  function renderMembers() {
+    const search =
+      document
+        .getElementById('memberSearch')
+        .value
+        .trim()
+        .toLowerCase();
+  
+    const roleFilter =
+      document
+        .getElementById(
+          'memberRoleFilter'
+        )
+        .value;
+  
+    const recruiterFilter =
+      document
+        .getElementById(
+          'memberRecruiterFilter'
+        )
+        .value;
+  
+    const sortMode =
+      document
+        .getElementById(
+          'memberSort'
+        )
+        .value;
+    
+    const canViewBanned =
+      state.permissions.isAdmin ||
+      state.permissions.isRecruiter;
+  
+  
+    /* -------------------------------- */
+    /* Filtering                        */
+    /* -------------------------------- */
+  
+    let members =
+      state.members.filter(member => {
+  
+        const memberName =
+          String(
+            member['Member Name'] || ''
+          );
+  
+        const role =
+          String(
+            member['Role'] || ''
+          );
+  
+        const recruiter =
+          String(
+            member['Recruiter'] || ''
+          );
+
+        const canViewBanned =
+          state.permissions.isAdmin ||
+          state.permissions.isRecruiter;
+
+        // Non-admin/recruiters must never
+        // see banned members.
+        if (
+          role.toLowerCase() === 'banned' &&
+          !canViewBanned
+        ) {
+          return false;
+        }
+  
+  
+        // Free-text search
+        const searchable = [
+          memberName,
+          role,
+          recruiter
+        ]
+          .join(' ')
+          .toLowerCase();
+  
+        if (
+          search &&
+          !searchable.includes(search)
+        ) {
+          return false;
+        }
+  
+  
+        // Role filter
+        if (
+          roleFilter !== 'All' &&
+          role !== roleFilter
+        ) {
+          return false;
+        }
+  
+  
+        // Recruiter filter
+        if (
+          recruiterFilter !== 'All' &&
+          recruiter !== recruiterFilter
+        ) {
+          return false;
+        }
+  
+        return true;
+      });
+  
+  
+    /* -------------------------------- */
+    /* Sorting                          */
+    /* -------------------------------- */
+  
+    members = [...members];
+  
+    if (sortMode === 'id') {
+  
+      members.sort((a, b) => {
+  
+        const aId =
+          Number(a['Member Id']) || 0;
+  
+        const bId =
+          Number(b['Member Id']) || 0;
+  
+        return aId - bId;
+      });
+  
+    } else if (sortMode === 'nextDate') {
+  
+      members.sort((a, b) => {
+  
+        const aDate =
+          parseMemberDate(
+            getNextProgressionDate(a)
+          );
+  
+        const bDate =
+          parseMemberDate(
+            getNextProgressionDate(b)
+          );
+  
+  
+        // Records with no next date go last.
+        if (!aDate && !bDate) {
+          return String(
+            a['Member Name'] || ''
+          ).localeCompare(
+            String(
+              b['Member Name'] || ''
+            )
+          );
+        }
+  
+        if (!aDate) {
+          return 1;
+        }
+  
+        if (!bDate) {
+          return -1;
+        }
+  
+        return aDate - bDate;
+      });
+  
+    } else {
+  
+      // Alphabetical default
+      members.sort((a, b) =>
+        String(
+          a['Member Name'] || ''
+        ).localeCompare(
+          String(
+            b['Member Name'] || ''
+          )
+        )
+      );
+    }
+  
+  
+    /* -------------------------------- */
+    /* Dynamic progression column       */
+    /* -------------------------------- */
+  
+    const showNextProgression =
+      roleFilter === 'Applicant' ||
+      roleFilter === 'New Member';
+  
+  
+    /* -------------------------------- */
+    /* Empty result                     */
+    /* -------------------------------- */
+  
+    if (!members.length) {
+      document.getElementById(
+        'membersTable'
+      ).innerHTML =
+        '<div class="muted">No members found.</div>';
+  
+      return;
+    }
+  
+  
+    /* -------------------------------- */
+    /* Table                            */
+    /* -------------------------------- */
+  
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>Member Name</th>
+            <th>Role</th>
+            <th>Recruiter</th>
+    `;
+  
+    if (showNextProgression) {
+      html += `
+        <th>Next Progression Date</th>
+      `;
+    }
+  
+    html += `
+            <th>Actions</th>
+          </tr>
+        </thead>
+  
+        <tbody>
+    `;
+  
+  
+    members.forEach(member => {
+  
+      html += `
+        <tr>
+  
+          <td>
+            ${escapeHtml(
+              member['Member Name'] ?? ''
+            )}
+          </td>
+  
+          <td>
+            ${escapeHtml(
+              member['Role'] ?? ''
+            )}
+          </td>
+  
+          <td>
+            ${escapeHtml(
+              member['Recruiter'] ?? ''
+            )}
+          </td>
+      `;
+  
+      if (showNextProgression) {
+  
+        const nextDate =
+          getNextProgressionDate(
+            member
+          );
+  
+        html += `
+          <td>
+            ${
+              nextDate
+                ? escapeHtml(nextDate)
+                : '<span class="muted">Not set</span>'
+            }
+          </td>
+        `;
+      }
+  
+      html += `
+          <td>
+            <button
+              class="action"
+              onclick="viewMember(
+                ${Number(member['Member Id'])}
+              )"
+            >
+              View
+            </button>
+          </td>
+  
+        </tr>
+      `;
+    });
+  
+  
+    html += `
+        </tbody>
+      </table>
+    `;
+  
+    document.getElementById(
+      'membersTable'
+    ).innerHTML = html;
+  }
+
+  function viewMember(memberId) {
+    const member =
+      state.members.find(
+        item =>
+          String(item['Member Id']) ===
+          String(memberId)
+      );
+  
+    if (!member) {
+      showError(
+        'Member could not be found.'
+      );
+      return;
+    }
+  
+    viewedMember = member;
+  
+    document.getElementById(
+      'memberViewTitle'
+    ).textContent =
+      member['Member Name'] ||
+      'Member Details';
+  
+    const canManage =
+      state.permissions.isAdmin ||
+      state.permissions.isRecruiter;
+  
+    const progressionToApplicant =
+      hasMemberDate(
+        member[
+          'Progression to Applicant'
+        ]
+      );
+  
+    const progressionToNewMember =
+      hasMemberDate(
+        member[
+          'Progression to New Member'
+        ]
+      );
+  
+    const progressionToMember =
+      hasMemberDate(
+        member[
+          'Progression to Member'
+        ]
+      );
+  
+    /*
+     * These fields are always visible.
+     */
+    const fields = [
+      'Member Id',
+      'Member Name',
+      'Role',
+      'Recruiter',
+      'Stage'
+    ];
+  
+    /*
+     * Fully progressed Member.
+     */
+    if (progressionToMember) {
+  
+      fields.push(
+        'Progression to Member'
+      );
+  
+    /*
+     * New Member.
+     */
+    } else if (
+      progressionToNewMember
+    ) {
+  
+      fields.push(
+        'Progression to New Member'
+      );
+  
+    /*
+     * Applicant.
+     */
+    } else if (
+      progressionToApplicant
+    ) {
+  
+      fields.push(
+        'Progression to Applicant',
+        'Main Missions Joined',
+        'Other Missions Joined',
+        'Ready to Progress'
+      );
+  
+    /*
+     * Just joined / pre-applicant.
+     */
+    } else {
+  
+      fields.push(
+        'Discord Join Date',
+        'Training/Induction Done'
+      );
+    }
+  
+    /*
+     * Notes remain restricted.
+     */
+    if (canManage) {
+      fields.push(
+        'Notes / Observations'
+      );
+    }
+  
+    let html = `
+      <div class="member-details">
+    `;
+  
+    fields.forEach(field => {
+  
+      if (!(field in member)) {
+        return;
+      }
+  
+      html += `
+        <div class="member-detail-row">
+  
+          <div class="member-detail-label">
+            ${escapeHtml(field)}
+          </div>
+  
+          <div class="member-detail-value">
+            ${escapeHtml(
+              member[field] ?? ''
+            )}
+          </div>
+  
+        </div>
+      `;
+    });
+  
+    html += '</div>';
+  
+    document.getElementById(
+      'memberViewContents'
+    ).innerHTML =
+      html;
+  
+    document.getElementById(
+      'memberViewEditButton'
+    ).style.display =
+      canManage
+        ? ''
+        : 'none';
+  
+    document.getElementById(
+      'memberViewDeleteButton'
+    ).style.display =
+      canManage
+        ? ''
+        : 'none';
+  
+    document.getElementById(
+      'memberViewDialog'
+    ).showModal();
+  }
+
+  function editViewedMember() {
+    if (!viewedMember) {
+      return;
+    }
+  
+    if (
+      !state.permissions.isAdmin &&
+      !state.permissions.isRecruiter
+    ) {
+      showError(
+        'Administrator or Recruiter access required.'
+      );
+  
+      return;
+    }
+    
+    let html = '';
+  
+    // Member Name
+    html += createTextField(
+      'Member Name',
+      viewedMember['Member Name'] ?? ''
+    );
+  
+    // Role
+    html += createSelectField(
+      'Role',
+      viewedMember['Role'] ?? '',
+      [
+        'Awaiting Induction',
+        'Applicant',
+        'New Member',
+        'Member',
+        'Left',
+        'Banned'
+      ]
+    );
+
+    const recruiterNames =
+      [...state.recruiters]
+        .filter(Boolean)
+        .sort((a, b) =>
+          a.localeCompare(b)
+        );
+    
+    html += createSelectField(
+      'Recruiter',
+      viewedMember[
+        'Recruiter'
+      ] ?? '',
+      recruiterNames,
+      true
+    );
+    
+    html += createSelectField(
+      'Stage',
+      viewedMember[
+        'Stage'
+      ] ?? '',
+      [
+        'Probation',
+        'Complete',
+        'Left',
+        'On Break',
+        'Banned'
+      ]
+    );
+  
+    const progressionToApplicant =
+      hasMemberDate(
+        viewedMember[
+          'Progression to Applicant'
+        ]
+      );
+    
+    const readyToProgress =
+      memberBoolean(
+        viewedMember[
+          'Ready to Progress'
+        ]
+      );
+    
+    const progressionToNewMember =
+      hasMemberDate(
+        viewedMember[
+          'Progression to New Member'
+        ]
+      );
+    
+    const progressionToMember =
+      hasMemberDate(
+        viewedMember[
+          'Progression to Member'
+        ]
+      );
+    
+    
+    /*
+     * Fully progressed Member
+     *
+     * Member Name, Role, Recruiter,
+     * Stage and Notes are still shown,
+     * but no progression fields are needed.
+     */
+    if (progressionToMember) {
+    
+      // No additional fields.
+    
+    
+    /*
+     * New Member
+     *
+     * Show the existing New Member date
+     * and allow Progression to Member.
+     */
+    } else if (
+      progressionToNewMember
+    ) {
+    
+      html += createDateField(
+        'Progression to New Member',
+        viewedMember[
+          'Progression to New Member'
+        ] ?? ''
+      );
+    
+      html += createDateField(
+        'Progression to Member',
+        viewedMember[
+          'Progression to Member'
+        ] ?? ''
+      );
+    
+    
+    /*
+     * Applicant
+     */
+    } else if (
+      progressionToApplicant
+    ) {
+    
+      html += createNumberField(
+        'Main Missions Joined',
+        viewedMember[
+          'Main Missions Joined'
+        ] ?? 0
+      );
+    
+      html += createNumberField(
+        'Other Missions Joined',
+        viewedMember[
+          'Other Missions Joined'
+        ] ?? 0
+      );
+    
+      html += createReadOnlyCheckboxField(
+        'Ready to Progress',
+        viewedMember[
+          'Ready to Progress'
+        ]
+      );
+    
+      /*
+       * Only show Progression to New Member
+       * once Ready to Progress is true.
+       */
+      if (readyToProgress) {
+    
+        html += createDateField(
+          'Progression to New Member',
+          viewedMember[
+            'Progression to New Member'
+          ] ?? ''
+        );
+      }
+    
+    
+    /*
+     * Just Joined / Pre-Applicant
+     */
+    } else {
+    
+      html += createDateField(
+        'Discord Join Date',
+        viewedMember[
+          'Discord Join Date'
+        ] ?? ''
+      );
+    
+      html += createCheckboxField(
+        'Training/Induction Done',
+        viewedMember[
+          'Training/Induction Done'
+        ]
+      );
+    
+      html += createDateField(
+        'Progression to Applicant',
+        viewedMember[
+          'Progression to Applicant'
+        ] ?? ''
+      );
+    }
+  
+    // Notes
+    html += `
+      <div class="form-row">
+        <label>Notes / Observations</label>
+  
+        <textarea
+          data-member-field="Notes / Observations"
+          rows="5"
+        >${escapeHtml(
+          viewedMember['Notes / Observations'] ?? ''
+        )}</textarea>
+      </div>
+    `;
+  
+    document.getElementById(
+      'memberEditFields'
+    ).innerHTML = html;
+    
+    
+    /*
+     * Update Role / Stage preview when
+     * progression dates are changed.
+     */
+    document
+      .querySelectorAll(
+        '#memberEditFields input[type="date"]'
+      )
+      .forEach(input => {
+    
+        input.addEventListener(
+          'change',
+          updateMemberProgressionPreview
+        );
+    
+      });
+    
+    
+    /*
+     * Live Ready to Progress preview.
+     */
+    const mainInput =
+      document.querySelector(
+        '#memberEditFields [data-member-field="Main Missions Joined"]'
+      );
+    
+    const otherInput =
+      document.querySelector(
+        '#memberEditFields [data-member-field="Other Missions Joined"]'
+      );
+    
+    if (
+      mainInput &&
+      otherInput
+    ) {
+      const updateReadyPreview = () => {
+    
+        const ready =
+          calculateReadyToProgress(
+            mainInput.value,
+            otherInput.value
+          );
+    
+        const readyCheckbox =
+          document.querySelector(
+            '#memberEditFields input[type="checkbox"][disabled]'
+          );
+    
+        if (readyCheckbox) {
+          readyCheckbox.checked =
+            ready;
+        }
+      };
+    
+      mainInput.addEventListener(
+        'input',
+        updateReadyPreview
+      );
+    
+      otherInput.addEventListener(
+        'input',
+        updateReadyPreview
+      );
+    
+      updateReadyPreview();
+    }
+    
+    
+    document.getElementById(
+      'memberViewDialog'
+    ).close();
+    
+    document.getElementById(
+      'memberEditDialog'
+    ).showModal();
+  }
+
+  function saveMemberEdit() {
+    if (!viewedMember) {
+      return;
+    }
+  
+    const updates = {};
+  
+    document
+      .querySelectorAll(
+        '#memberEditFields [data-member-field]'
+      )
+      .forEach(input => {
+    
+        const field =
+          input.dataset.memberField;
+    
+        if (input.type === 'checkbox') {
+          updates[field] =
+            input.checked;
+        } else if (input.type === 'number') {
+          updates[field] =
+            input.value === ''
+              ? ''
+              : Number(input.value);
+        } else {
+          updates[field] =
+            input.value;
+        }
+      });
+  
+    acatRun()
+      .withSuccessHandler(members => {
+
+        const memberId =
+          viewedMember['Member Id'];
+
+        state.members =
+          members || [];
+
+        viewedMember =
+          state.members.find(
+            item =>
+              String(item['Member Id']) ===
+              String(memberId)
+          ) || null;
+
+        document.getElementById(
+          'memberEditDialog'
+        ).close();
+
+        renderMembers();
+        populateMemberSelectors();
+        updateDashboard();
+
+        showSuccess(
+          'Member updated.'
+        );
+
+        if (viewedMember) {
+          viewMember(memberId);
+        }
+
+      })
+      .withFailureHandler(showError)
+      .updateMember(
+        viewedMember['Member Id'],
+        updates
+      );
+  }
+  
+  function deleteViewedMember() {
+    if (!viewedMember) {
+      return;
+    }
+  
+    if (
+      !state.permissions.isAdmin &&
+      !state.permissions.isRecruiter
+    ) {
+      showError(
+        'Administrator or Recruiter access required.'
+      );
+      return;
+    }
+  
+    const memberId =
+      viewedMember['Member Id'];
+  
+    const name =
+      viewedMember['Member Name'] ||
+      'this member';
+  
+    if (
+      !confirm(
+        `Are you sure you want to delete ${name}?`
+      )
+    ) {
+      return;
+    }
+  
+    const button =
+      document.getElementById(
+        'memberViewDeleteButton'
+      );
+  
+    button.disabled = true;
+    button.innerHTML =
+      '<span class="button-spinner"></span>Deleting...';
+  
+    acatRun()
+      .withSuccessHandler(members => {
+  
+        state.members =
+          members || [];
+  
+        viewedMember = null;
+  
+        document.getElementById(
+          'memberViewDialog'
+        ).close();
+  
+        button.disabled = false;
+        button.textContent = 'Delete';
+  
+        renderMembers();
+        populateMemberSelectors();
+        updateDashboard();
+  
+        showSuccess(
+          `${name} deleted.`
+        );
+  
+      })
+      .withFailureHandler(error => {
+  
+        button.disabled = false;
+        button.textContent = 'Delete';
+  
+        showError(error);
+  
+      })
+      .deleteMember(memberId);
+  }
+  
+  function openMemberExtraFields() {
+    if (!viewedMember) {
+      return;
+    }
+  
+    let html = '';
+  
+    html += createTextField(
+      'Member Name',
+      viewedMember[
+        'Member Name'
+      ] ?? ''
+    );
+  
+    html += createSelectField(
+      'Role',
+      viewedMember[
+        'Role'
+      ] ?? '',
+      [
+        'Awaiting Induction',
+        'Applicant',
+        'New Member',
+        'Member',
+        'Left',
+        'Banned'
+      ]
+    );
+  
+    html += createSelectField(
+      'Recruiter',
+      viewedMember[
+        'Recruiter'
+      ] ?? '',
+      [...state.recruiters]
+        .filter(Boolean)
+        .sort((a, b) =>
+          a.localeCompare(b)
+        ),
+      true
+    );
+  
+    html += createSelectField(
+      'Stage',
+      viewedMember[
+        'Stage'
+      ] ?? '',
+      [
+        'Probation',
+        'Complete',
+        'Left',
+        'On Break',
+        'Banned'
+      ]
+    );
+  
+    html += createDateField(
+      'Discord Join Date',
+      viewedMember[
+        'Discord Join Date'
+      ] ?? ''
+    );
+  
+    html += createCheckboxField(
+      'Training/Induction Done',
+      viewedMember[
+        'Training/Induction Done'
+      ]
+    );
+  
+    html += createDateField(
+      'Progression to Applicant',
+      viewedMember[
+        'Progression to Applicant'
+      ] ?? ''
+    );
+  
+    html += createNumberField(
+      'Main Missions Joined',
+      viewedMember[
+        'Main Missions Joined'
+      ] ?? 0
+    );
+  
+    html += createNumberField(
+      'Other Missions Joined',
+      viewedMember[
+        'Other Missions Joined'
+      ] ?? 0
+    );
+  
+    html += createReadOnlyCheckboxField(
+      'Ready to Progress',
+      viewedMember[
+        'Ready to Progress'
+      ]
+    );
+  
+    html += createDateField(
+      'Progression to New Member',
+      viewedMember[
+        'Progression to New Member'
+      ] ?? ''
+    );
+  
+    html += createDateField(
+      'Progression to Member',
+      viewedMember[
+        'Progression to Member'
+      ] ?? ''
+    );
+  
+    html += `
+      <div class="form-row">
+        <label>
+          Notes / Observations
+        </label>
+  
+        <textarea
+          data-member-field="Notes / Observations"
+          rows="5"
+        >${escapeHtml(
+          viewedMember[
+            'Notes / Observations'
+          ] ?? ''
+        )}</textarea>
+      </div>
+    `;
+  
+    document.getElementById(
+      'memberExtraFields'
+    ).innerHTML =
+      html;
+  
+    document.getElementById(
+      'memberEditDialog'
+    ).close();
+  
+    document.getElementById(
+      'memberExtraFieldsDialog'
+    ).showModal();
+  }
+  
+  function saveMemberExtraFields() {
+    if (!viewedMember) {
+      return;
+    }
+  
+    const updates = {};
+  
+    document
+      .querySelectorAll(
+        '#memberExtraFields [data-member-field]'
+      )
+      .forEach(input => {
+  
+        const field =
+          input.dataset.memberField;
+  
+        if (input.type === 'checkbox') {
+          updates[field] =
+            input.checked;
+  
+        } else if (
+          input.type === 'number'
+        ) {
+          updates[field] =
+            input.value === ''
+              ? ''
+              : Number(
+                  input.value
+                );
+  
+        } else {
+          updates[field] =
+            input.value;
+        }
+      });
+  
+    const memberId =
+      viewedMember[
+        'Member Id'
+      ];
+  
+    acatRun()
+      .withSuccessHandler(members => {
+  
+        state.members =
+          members || [];
+  
+        viewedMember =
+          state.members.find(
+            item =>
+              String(
+                item['Member Id']
+              ) ===
+              String(memberId)
+          ) || null;
+  
+        document.getElementById(
+          'memberExtraFieldsDialog'
+        ).close();
+  
+        renderMembers();
+        populateMemberSelectors();
+        updateDashboard();
+  
+        showSuccess(
+          'Member updated.'
+        );
+  
+        if (viewedMember) {
+          viewMember(memberId);
+        }
+  
+      })
+      .withFailureHandler(showError)
+      .updateMember(
+        memberId,
+        updates
+      );
+  }
+  
+  function viewAllMemberDetails() {
+    if (!viewedMember) {
+      return;
+    }
+  
+    const canManage =
+      state.permissions.isAdmin ||
+      state.permissions.isRecruiter;
+  
+    const fields = [
+      'Member Id',
+      'Member Name',
+      'Role',
+      'Recruiter',
+      'Stage',
+      'Discord Join Date',
+      'Training/Induction Done',
+      'Progression to Applicant',
+      'Main Missions Joined',
+      'Other Missions Joined',
+      'Ready to Progress',
+      'Progression to New Member',
+      'Progression to Member'
+    ];
+  
+    if (canManage) {
+      fields.push(
+        'Notes / Observations'
+      );
+    }
+  
+    let html = `
+      <div class="member-details">
+    `;
+  
+    fields.forEach(field => {
+  
+      if (!(field in viewedMember)) {
+        return;
+      }
+  
+      html += `
+        <div class="member-detail-row">
+  
+          <div class="member-detail-label">
+            ${escapeHtml(field)}
+          </div>
+  
+          <div class="member-detail-value">
+            ${escapeHtml(
+              viewedMember[field] ?? ''
+            )}
+          </div>
+  
+        </div>
+      `;
+    });
+  
+    html += '</div>';
+  
+    document.getElementById(
+      'memberAllDetailsTitle'
+    ).textContent =
+      `${viewedMember['Member Name'] || 'Member'} — All Details`;
+  
+    document.getElementById(
+      'memberAllDetailsContents'
+    ).innerHTML =
+      html;
+  
+    document.getElementById(
+      'memberViewDialog'
+    ).close();
+  
+    document.getElementById(
+      'memberAllDetailsDialog'
+    ).showModal();
+  }
+  
+  function updateMemberProgressionPreview() {
+    const applicantInput =
+      document.querySelector(
+        '#memberEditFields [data-member-field="Progression to Applicant"]'
+      );
+  
+    const newMemberInput =
+      document.querySelector(
+        '#memberEditFields [data-member-field="Progression to New Member"]'
+      );
+  
+    const memberInput =
+      document.querySelector(
+        '#memberEditFields [data-member-field="Progression to Member"]'
+      );
+  
+    const roleInput =
+      document.querySelector(
+        '#memberEditFields [data-member-field="Role"]'
+      );
+  
+    const stageInput =
+      document.querySelector(
+        '#memberEditFields [data-member-field="Stage"]'
+      );
+  
+  
+    /*
+     * Manual override values must not be
+     * overwritten by progression logic.
+     */
+    const roleOverride =
+      roleInput &&
+      [
+        'Left',
+        'Banned'
+      ].includes(
+        roleInput.value
+      );
+  
+    const stageOverride =
+      stageInput &&
+      [
+        'Left',
+        'On Break',
+        'Banned'
+      ].includes(
+        stageInput.value
+      );
+  
+  
+    /*
+     * Progression to Member
+     */
+    if (memberInput?.value) {
+  
+      if (
+        roleInput &&
+        !roleOverride
+      ) {
+        roleInput.value =
+          'Member';
+      }
+  
+      if (
+        stageInput &&
+        !stageOverride
+      ) {
+        stageInput.value =
+          'Complete';
+      }
+  
+      return;
+    }
+  
+  
+    /*
+     * Progression to New Member
+     */
+    if (newMemberInput?.value) {
+  
+      if (
+        roleInput &&
+        !roleOverride
+      ) {
+        roleInput.value =
+          'New Member';
+      }
+  
+      return;
+    }
+  
+  
+    /*
+     * Progression to Applicant
+     */
+    if (applicantInput?.value) {
+  
+      if (
+        roleInput &&
+        !roleOverride
+      ) {
+        roleInput.value =
+          'Applicant';
+      }
+  
+      return;
+    }
+  }
+  
+  function updateMemberSortOptions() {
+    const roleFilter =
+      document.getElementById(
+        'memberRoleFilter'
+      ).value;
+  
+    const sortSelect =
+      document.getElementById(
+        'memberSort'
+      );
+  
+    const nextDateOption =
+      sortSelect.querySelector(
+        'option[value="nextDate"]'
+      );
+  
+    const allowed =
+      roleFilter === 'Applicant' ||
+      roleFilter === 'New Member';
+  
+    nextDateOption.disabled =
+      !allowed;
+  
+    // If user had Next Date selected,
+    // reset when switching to another role.
+    if (
+      !allowed &&
+      sortSelect.value === 'nextDate'
+    ) {
+      sortSelect.value =
+        'alphabetical';
+    }
+  }
+  
+  function getNextProgressionDate(member) {
+    const role =
+      String(
+        member['Role'] || ''
+      )
+        .trim()
+        .toLowerCase();
+  
+    switch (role) {
+  
+      case 'applicant':
+        return (
+          member['Progression to New Member'] ||
+          ''
+        );
+  
+      case 'new member':
+        return (
+          member['Progression to Member'] ||
+          ''
+        );
+  
+      default:
+        return '';
+    }
+  }
+  
+  function parseMemberDate(value) {
+    if (!value) {
+      return null;
+    }
+  
+    const text =
+      String(value).trim();
+  
+    // yyyy-mm-dd
+    let match =
+      text.match(
+        /^(\d{4})-(\d{1,2})-(\d{1,2})$/
+      );
+  
+    if (match) {
+      return new Date(
+        Number(match[1]),
+        Number(match[2]) - 1,
+        Number(match[3])
+      );
+    }
+  
+    // Australian dd/mm/yyyy
+    match =
+      text.match(
+        /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
+      );
+  
+    if (match) {
+      return new Date(
+        Number(match[3]),
+        Number(match[2]) - 1,
+        Number(match[1])
+      );
+    }
+  
+    return null;
+  }
+  
+  function calculateReadyToProgress(
+    mainMissions,
+    otherMissions
+  ) {
+    mainMissions =
+      Number(mainMissions) || 0;
+  
+    otherMissions =
+      Number(otherMissions) || 0;
+  
+    return (
+      mainMissions >= 3 ||
+      (
+        mainMissions >= 2 &&
+        otherMissions >= 4
+      )
+    );
+  }
+  
+  function hasMemberDate(value) {
+    return Boolean(
+      String(value || '').trim()
+    );
+  }
+  
+  function memberBoolean(value) {
+    return (
+      value === true ||
+      String(value || '')
+        .trim()
+        .toLowerCase() === 'true' ||
+      String(value || '')
+        .trim()
+        .toLowerCase() === 'yes'
+    );
+  }
+  
+  function getMemberPhase(member) {
+    const progressionToApplicant =
+      hasMemberDate(
+        member[
+          'Progression to Applicant'
+        ]
+      );
+  
+    const readyToProgress =
+      member[
+        'Ready to Progress'
+      ] === true ||
+      String(
+        member[
+          'Ready to Progress'
+        ] || ''
+      )
+        .trim()
+        .toLowerCase() === 'true';
+  
+    const progressionToNewMember =
+      hasMemberDate(
+        member[
+          'Progression to New Member'
+        ]
+      );
+  
+    const progressionToMember =
+      hasMemberDate(
+        member[
+          'Progression to Member'
+        ]
+      );
+  
+    if (progressionToMember) {
+      return 'member';
+    }
+  
+    if (progressionToNewMember) {
+      return 'newMember';
+    }
+  
+    if (readyToProgress) {
+      return 'readyForNewMember';
+    }
+  
+    if (progressionToApplicant) {
+      return 'applicant';
+    }
+  
+    return 'preApplicant';
+  }
+
+</script>
