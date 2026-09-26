@@ -84,14 +84,24 @@
       Admins: state.admins,
       Recruiters: state.recruiters,
       Trainers: state.trainers,
-      MissionCreators: state.missionCreators
+      MissionCreators: state.missionCreators,
+      Members: state.members?.map(member => member['Username']) || [],
+      NewMembers: state.members?.filter(member =>
+        String(member['Role'] || '').trim().toLowerCase() === 'new member'
+      ).map(member => member['Username']) || [],
+      Applicants: state.members?.filter(member =>
+        String(member['Role'] || '').trim().toLowerCase() === 'applicant'
+      ).map(member => member['Username']) || []
     }
 
     const titles = {
       Admins: 'Administrators',
       Recruiters: 'Recruiters',
       Trainers: 'Trainers',
-      MissionCreators: 'Mission Creators'
+      MissionCreators: 'Mission Creators',
+      Members: 'Members',
+      NewMembers: 'New Members',
+      Applicants: 'Applicants'
     }
     
     const names = (lists[role] || [])

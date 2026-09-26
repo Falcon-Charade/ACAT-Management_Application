@@ -46,7 +46,13 @@
 
 <body>
   <header>
-    <h1 id="appName">ACAT Management Application</h1>
+    <div class="app-brand">
+      <img
+        src="https://raw.githubusercontent.com/Falcon-Charade/ACAT-Management_Application/main/Frontend/Images/acat_logo.png"
+        alt="ACAT Logo"
+      >
+      <h1 id="appName">ACAT Management Application</h1>
+    </div>
     <div class="user-area">
       <div
         class="user"
@@ -85,9 +91,9 @@
             <div class="chart-control-button">
               <button
                 class="action primary"
-                onclick="openNameViewDialog('Admins')"
+                onclick="openNameViewDialog('Applicants')"
               >
-                View Admins
+                View Applicants
               </button>
             </div>
           </div>
@@ -96,9 +102,9 @@
             <div class="chart-control-button">
               <button
                 class="action primary"
-                onclick="openNameViewDialog('Recruiters')"
+                onclick="openNameViewDialog('NewMembers')"
               >
-                View Recruiters
+                View New Members
               </button>
             </div>
           </div>
@@ -107,9 +113,9 @@
             <div class="chart-control-button">
               <button
                 class="action primary"
-                onclick="openNameViewDialog('Trainers')"
+                onclick="openNameViewDialog('Members')"
               >
-                View Trainers
+                View Members
               </button>
             </div>
           </div>
@@ -128,9 +134,10 @@
 
         <h4>Counts</h4>
         <div class="cards dashboard-cards">
+
           <div class="card">
-            <div class="muted">Members</div>
-            <div class="metric" id="memberCount">0</div>
+            <div class="muted">Applicants</div>
+            <div class="metric" id="applicantCount">0</div>
           </div>
 
           <div class="card">
@@ -139,8 +146,8 @@
           </div>
 
           <div class="card">
-            <div class="muted">Applicants</div>
-            <div class="metric" id="applicantCount">0</div>
+            <div class="muted">Members</div>
+            <div class="metric" id="memberCount">0</div>
           </div>
 
           <div class="card">
@@ -159,10 +166,17 @@
           </div>
         </div>
 
-        <h4>Access Level</h4>
+        <h4>Training History</h4>
         <div class="card">
-          <strong>Access</strong>
-          <div id="permissionSummary" class="muted" style="margin-top:8px"></div>
+          <div class="chart-control-button">
+            <button
+              class="action"
+              style="margin-left: auto;"
+              onclick="openTrainingGraphDialog()"
+            >
+              View Training Graph
+            </button>
+          </div>
         </div>
 
       </section>
