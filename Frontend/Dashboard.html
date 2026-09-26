@@ -83,13 +83,13 @@
       Recruiters: state.recruiters,
       Trainers: state.trainers,
       MissionCreators: state.missionCreators,
-      Members: state.members?.map(member => member['Username']) || [],
+      Members: state.members?.map(member => member['Member Name']) || [],
       NewMembers: state.members?.filter(member =>
         String(member['Role'] || '').trim().toLowerCase() === 'new member'
-      ).map(member => member['Username']) || [],
+      ).map(member => member['Member Name']) || [],
       Applicants: state.members?.filter(member =>
         String(member['Role'] || '').trim().toLowerCase() === 'applicant'
-      ).map(member => member['Username']) || []
+      ).map(member => member['Member Name']) || []
     }
 
     const titles = {
